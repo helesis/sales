@@ -5,7 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Booking Dashboard 2026</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
+    <script src="https://unpkg.com/bcryptjs@2.4.3/dist/bcrypt.min.js" crossorigin="anonymous"></script>
+    <script>
+      if (typeof window.bcrypt === 'undefined' && typeof window.bcryptjs !== 'undefined') window.bcrypt = window.bcryptjs;
+      if (typeof window.bcrypt === 'undefined' && typeof window.dcodeIO !== 'undefined' && window.dcodeIO && window.dcodeIO.bcrypt) window.bcrypt = window.dcodeIO.bcrypt;
+    </script>
     <script src="vendor/chart.umd.min.js"></script>
     <script src="vendor/chartjs-plugin-datalabels.min.js"></script>
     <style>
@@ -2291,12 +2295,13 @@
                     return;
                 }
                 // Parola kontrolü (bcryptjs client-side)
-                if (typeof bcrypt === 'undefined') {
-                    errEl.textContent = 'bcryptjs yüklenemedi.';
+                const bcryptLib = window.bcrypt || (typeof bcrypt !== 'undefined' ? bcrypt : null);
+                if (!bcryptLib || typeof bcryptLib.compareSync !== 'function') {
+                    errEl.textContent = 'bcryptjs yüklenemedi. Sayfayı yenileyin veya script engelleyici kapatın.';
                     errEl.style.display = 'block';
                     return;
                 }
-                const match = bcrypt.compareSync(password, user.password_hash);
+                const match = bcryptLib.compareSync(password, user.password_hash);
                 if (!match) {
                     errEl.textContent = 'Parola hatalı.';
                     errEl.style.display = 'block';
