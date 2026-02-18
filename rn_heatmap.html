@@ -334,6 +334,7 @@
             color: #64748b;
         }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 <div class="page">
@@ -774,13 +775,28 @@
         });
     }
 
-    // API'den veri çek ve heatmap'i oluştur
+    // Supabase'ten veri çek ve heatmap'i oluştur (API yerine - statik host'ta da çalışır)
+    const SUPABASE_URL = 'https://gvapdwdxikctalydaoak.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd2YXBkd2R4aWtjdGFseWRhb2FrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyNDY0MDIsImV4cCI6MjA4NjgyMjQwMn0.35f3j7MUDBzXWKxyZp4oiX-koRWW0AlufqrC61jM7xE';
+    let supabaseClient = null;
+    if (typeof window.supabase !== 'undefined' && SUPABASE_URL && SUPABASE_ANON_KEY) {
+        try { supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } catch (e) { console.error('Supabase:', e); }
+    }
+
     document.addEventListener('DOMContentLoaded', async () => {
         try {
-            const resp = await fetch('http://localhost:3001/api/rn-heatmap');
-            const data = await resp.json();
-            const rows = Array.isArray(data) ? data : (data.rows || []);
-            apiYearTotalRn = (data && typeof data.yearTotalRn === 'number' && !isNaN(data.yearTotalRn)) ? data.yearTotalRn : null;
+            let rows = [];
+            if (supabaseClient) {
+                const [rowsRes, metaRes] = await Promise.all([
+                    supabaseClient.from('rn_heatmap').select('month_key, market, room_type, rn, price'),
+                    supabaseClient.from('rn_heatmap_meta').select('value').eq('key', 'year_total_rn').maybeSingle()
+                ]);
+                rows = rowsRes.data || [];
+                apiYearTotalRn = (metaRes.data && metaRes.data.value != null && !isNaN(metaRes.data.value)) ? Number(metaRes.data.value) : null;
+            }
+            if (rows.length === 0 && !apiYearTotalRn) {
+                console.warn('RN heatmap: Supabase verisi yok veya client yok');
+            }
 
             // Ay listesi
             const monthSet = new Set();

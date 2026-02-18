@@ -56,6 +56,7 @@
         .hm-tooltip .change-up { color: #16a34a; }
         .hm-tooltip .change-down { color: #dc2626; }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 <div class="page">
@@ -226,6 +227,13 @@
         return { data2026: parseCell(v26), data2025: parseCell(v25) };
     }
 
+    var SUPABASE_URL = 'https://gvapdwdxikctalydaoak.supabase.co';
+    var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd2YXBkd2R4aWtjdGFseWRhb2FrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyNDY0MDIsImV4cCI6MjA4NjgyMjQwMn0.35f3j7MUDBzXWKxyZp4oiX-koRWW0AlufqrC61jM7xE';
+    var supabaseClient = null;
+    if (typeof window.supabase !== 'undefined' && SUPABASE_URL && SUPABASE_ANON_KEY) {
+        try { supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } catch (err) { console.error('Supabase:', err); }
+    }
+
     async function loadHeatmap() {
         var theadPazar = document.getElementById('heatmapHeadPazar');
         var tbodyPazar = document.getElementById('heatmapBodyPazar');
@@ -233,12 +241,15 @@
         var tbodyData = document.getElementById('heatmapBodyData');
         var rows = [];
         try {
-            var url = (window.location.origin && window.location.port === '3001')
-                ? (window.location.origin + '/api/alos-adb-heatmap')
-                : 'http://localhost:3001/api/alos-adb-heatmap';
-            var res = await fetch(url);
-            if (!res.ok) throw new Error(res.statusText);
-            rows = await res.json();
+            if (supabaseClient) {
+                var res = await supabaseClient.from('alos_adb_heatmap').select('data').limit(1).maybeSingle();
+                rows = (res.data && Array.isArray(res.data.data)) ? res.data.data : [];
+            }
+            if (rows.length === 0) {
+                tbodyPazar.innerHTML = '<tr><td style="text-align:center;padding:20px;color:#64748b;">Veri yok veya Supabase bağlantısı yok.</td></tr>';
+                tbodyData.innerHTML = '';
+                return;
+            }
         } catch (e) {
             tbodyPazar.innerHTML = '<tr><td style="text-align:center;padding:20px;color:#64748b;">Veri yüklenemedi: ' + e.message + '</td></tr>';
             tbodyData.innerHTML = '';

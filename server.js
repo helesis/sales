@@ -336,6 +336,192 @@ async function syncMonthlyData() {
   }
 }
 
+// Sync: RN Heatmap (Oracle → Supabase rn_heatmap + rn_heatmap_meta)
+async function syncRnHeatmap() {
+  if (!supabase) return;
+  let connection;
+  function parseRnAdb(val) {
+    if (val == null || typeof val !== 'string') return null;
+    const parts = val.trim().split(/\s*\/\s*/);
+    if (parts.length < 2) return null;
+    const rn = parseFloat(parts[0].replace(/,/g, '').trim());
+    const price = parseFloat(parts[1].replace(/,/g, '').trim());
+    if (isNaN(rn) || isNaN(price)) return null;
+    return { rn, price };
+  }
+  try {
+    connection = await oracledb.getConnection(dbConfig);
+    const result = await connection.execute(
+      `SELECT * FROM (
+          SELECT
+              NVL(Stay_Ay, 'TOPLAM') AS Stay_Ay,
+              NVL(Pazar, 'GENEL TOPLAM') AS Pazar,
+              Oda_Tipi,
+              TO_CHAR(SUM(RN_ODA), 'FM999,990') || ' / ' ||
+              TO_CHAR(ROUND(SUM(Rev) / NULLIF(SUM(PAX_HESABI), 0), 2), 'FM999,990.00') AS RN_ADB
+          FROM (
+              SELECT
+                  TO_CHAR(r.detail_date, 'YYYY-MM') AS Stay_Ay,
+                  r.mainmarketcode_long AS Pazar,
+                  r.rateroomtype AS Oda_Tipi,
+                  1 AS RN_ODA,
+                  (r.noofadults + NVL(r.ca3, 0) / 2) AS PAX_HESABI,
+                  CASE WHEN r.mainmarketcode_long = 'Local'
+                       THEN r.netpostamount / NULLIF(ex_s.exch_rate_day, 0)
+                       ELSE r.netpostamount / NULLIF(ex_d.exch_rate_day, 0)
+                  END AS Rev
+              FROM v8live.pro_isv_reservationinfo_voyage r
+              LEFT JOIN pro_isv_exchangerates ex_s ON ex_s.wdat_date = r.saledate AND ex_s.zcur_id = 1013
+              LEFT JOIN pro_isv_exchangerates ex_d ON ex_d.wdat_date = r.detail_date AND ex_d.zcur_id = 1013
+              WHERE r.reservationstatus = 1
+                AND r.detail_date >= TRUNC(SYSDATE)
+                AND TO_CHAR(r.detail_date, 'YYYY') IN ('2025', '2026')
+              UNION ALL
+              SELECT
+                  TO_CHAR(r.detail_date, 'YYYY-MM') AS Stay_Ay,
+                  r.mainmarketcode_long AS Pazar,
+                  'TUM_ODALAR' AS Oda_Tipi,
+                  1 AS RN_ODA,
+                  (r.noofadults + NVL(r.ca3, 0) / 2) AS PAX_HESABI,
+                  CASE WHEN r.mainmarketcode_long = 'Local'
+                       THEN r.netpostamount / NULLIF(ex_s.exch_rate_day, 0)
+                       ELSE r.netpostamount / NULLIF(ex_d.exch_rate_day, 0)
+                  END AS Rev
+              FROM v8live.pro_isv_reservationinfo_voyage r
+              LEFT JOIN pro_isv_exchangerates ex_s ON ex_s.wdat_date = r.saledate AND ex_s.zcur_id = 1013
+              LEFT JOIN pro_isv_exchangerates ex_d ON ex_d.wdat_date = r.detail_date AND ex_d.zcur_id = 1013
+              WHERE r.reservationstatus = 1
+                AND r.detail_date >= TRUNC(SYSDATE)
+                AND TO_CHAR(r.detail_date, 'YYYY') IN ('2025', '2026')
+          )
+          GROUP BY ROLLUP(Stay_Ay, Pazar), Oda_Tipi
+      )
+      PIVOT (
+          MAX(RN_ADB)
+          FOR Oda_Tipi IN (
+              'VILLA' AS "BUNGALOV_236",
+              'OTEL'  AS "STANDART_LAND_VIEW_57",
+              'ODNZ'  AS "STANDART_SEA_VIEW_70",
+              'FAM'   AS "BUNGALOV_AILE_133",
+              'OFAM'  AS "STANDART_FAMILY_8",
+              'SUIT'  AS "SUITE_4",
+              'TUM_ODALAR' AS "TOPLAM_508"
+          )
+      )
+      ORDER BY
+          CASE WHEN Stay_Ay = 'TOPLAM' THEN 2 ELSE 1 END,
+          Stay_Ay,
+          CASE WHEN Pazar = 'GENEL TOPLAM' THEN 2 ELSE 1 END,
+          Pazar`,
+      [],
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    const rows = result.rows || [];
+    const colMap = [
+      { key: 'BUNGALOV_236', id: 'BUNGALOV' },
+      { key: 'STANDART_LAND_VIEW_57', id: 'STANDART_LAND_VIEW' },
+      { key: 'STANDART_SEA_VIEW_70', id: 'STANDART_SEA_VIEW' },
+      { key: 'BUNGALOV_AILE_133', id: 'BUNGALOV_AILE_ODASI' },
+      { key: 'STANDART_FAMILY_8', id: 'STANDART_FAMILY_ROOM' },
+      { key: 'SUITE_4', id: 'SUITE' },
+      { key: 'TOPLAM_508', id: 'TUM_ODALAR' }
+    ];
+    const out = [];
+    let yearTotalRn = null;
+    const lastColKey = 'TOPLAM_508';
+    rows.forEach((row) => {
+      const stayAy = row.STAY_AY || row.Stay_Ay || row.stay_ay;
+      const pazar = row.PAZAR || row.Pazar || row.pazar;
+      if (!stayAy || !pazar) return;
+      if (stayAy === 'TOPLAM' && pazar === 'GENEL TOPLAM') {
+        const val = row[lastColKey] != null ? row[lastColKey] : (row[lastColKey.toUpperCase()]);
+        const parsed = parseRnAdb(val);
+        if (parsed && !isNaN(parsed.rn)) yearTotalRn = Math.round(parsed.rn);
+        return;
+      }
+      colMap.forEach(({ key, id }) => {
+        const val = row[key] != null ? row[key] : (row[key.toUpperCase()]);
+        const parsed = parseRnAdb(val);
+        if (parsed && (parsed.rn > 0 || parsed.price > 0)) {
+          out.push({
+            month_key: stayAy,
+            market: pazar,
+            room_type: id,
+            rn: parsed.rn,
+            price: parsed.price
+          });
+        }
+      });
+    });
+    if (out.length > 0) await syncToSupabase('rn_heatmap', out, true);
+    if (yearTotalRn != null) await syncToSupabase('rn_heatmap_meta', [{ key: 'year_total_rn', value: yearTotalRn }], true);
+    console.log('>>> Sync: rn_heatmap');
+  } catch (err) {
+    console.error('>>> Sync hatası (rn_heatmap):', err.message);
+  } finally {
+    if (connection) await connection.close();
+  }
+}
+
+// Sync: ALOS & ADB Heatmap (Oracle → Supabase alos_adb_heatmap)
+async function syncAlosAdbHeatmap() {
+  if (!supabase) return;
+  let connection;
+  try {
+    connection = await oracledb.getConnection(dbConfig);
+    const result = await connection.execute(
+      `SELECT * FROM (
+    SELECT
+        TO_CHAR(r.detail_date, 'YYYY-MM') AS Ay,
+        r.mainmarketcode_long AS Pazar,
+        ROUND(AVG(r.departuredate - r.arrivaldate), 1) || ' ; ' ||
+        ROUND(
+            SUM(CASE WHEN r.mainmarketcode_long = 'Local'
+                     THEN r.netpostamount / NULLIF(ex_s.exch_rate_day, 0)
+                     ELSE r.netpostamount / NULLIF(ex_d.exch_rate_day, 0) END)
+            / NULLIF(SUM(r.departuredate - r.arrivaldate), 0), 2
+        ) AS ALOS_ADB
+    FROM
+        v8live.pro_isv_reservationinfo_voyage r
+        LEFT JOIN pro_isv_exchangerates ex_s ON ex_s.wdat_date = r.saledate AND ex_s.zcur_id = 1013
+        LEFT JOIN pro_isv_exchangerates ex_d ON ex_d.wdat_date = r.detail_date AND ex_d.zcur_id = 1013
+    WHERE
+        r.reservationstatus = 1
+        AND (r.departuredate - r.arrivaldate) > 0
+        AND (
+            (TO_CHAR(r.detail_date, 'YYYY') = '2025' AND r.saledate <= ADD_MONTHS(TRUNC(SYSDATE), -12))
+            OR
+            (TO_CHAR(r.detail_date, 'YYYY') = '2026' AND r.saledate <= TRUNC(SYSDATE))
+        )
+    GROUP BY
+        TO_CHAR(r.detail_date, 'YYYY-MM'),
+        r.mainmarketcode_long
+)
+PIVOT (
+    MAX(ALOS_ADB)
+    FOR Ay IN (
+        '2025-01' AS JAN_25, '2025-02' AS FEB_25, '2025-03' AS MAR_25, '2025-04' AS APR_25,
+        '2025-05' AS MAY_25, '2025-06' AS JUN_25, '2025-07' AS JUL_25, '2025-08' AS AUG_25,
+        '2025-09' AS SEP_25, '2025-10' AS OCT_25, '2025-11' AS NOV_25, '2025-12' AS DEC_25,
+        '2026-01' AS JAN_26, '2026-02' AS FEB_26, '2026-03' AS MAR_26, '2026-04' AS APR_26,
+        '2026-05' AS MAY_26, '2026-06' AS JUN_26, '2026-07' AS JUL_26, '2026-08' AS AUG_26,
+        '2026-09' AS SEP_26, '2026-10' AS OCT_26, '2026-11' AS NOV_26, '2026-12' AS DEC_26
+    )
+)
+ORDER BY Pazar`,
+      [],
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    const rows = result.rows || [];
+    if (rows.length > 0) await syncToSupabase('alos_adb_heatmap', [{ data: rows }], true);
+    console.log('>>> Sync: alos_adb_heatmap');
+  } catch (err) {
+    console.error('>>> Sync hatası (alos_adb_heatmap):', err.message);
+  } finally {
+    if (connection) await connection.close();
+  }
+}
+
 // Sync: Tüm verileri senkronize et
 async function syncAllData() {
   if (!isWithinSyncHours()) {
@@ -345,7 +531,8 @@ async function syncAllData() {
   console.log('>>> Periyodik sync başlıyor...');
   await syncTodayMetrics();
   await syncMonthlyData();
-  // Diğer sync fonksiyonları da eklenebilir (today-agent-rn, booking-pace, vb.)
+  await syncRnHeatmap();
+  await syncAlosAdbHeatmap();
   console.log('>>> Periyodik sync tamamlandı');
 }
 
