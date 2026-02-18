@@ -547,7 +547,7 @@ function startPeriodicSync() {
 
 // Dashboard sayfası (login sonrası gösterilecek)
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'dashboard.html'));
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 // Mevcut endpoint
