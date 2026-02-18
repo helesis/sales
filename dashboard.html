@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Booking Dashboard 2026</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
     <script src="vendor/chart.umd.min.js"></script>
     <script src="vendor/chartjs-plugin-datalabels.min.js"></script>
     <style>
@@ -608,8 +610,21 @@
             ]
         };
 
-        const API_BASE = (typeof window !== 'undefined' && window.location && window.location.origin) ? window.location.origin : 'http://localhost:3001';
-        const REFRESH_INTERVAL_MS = 15 * 60 * 1000; // 15 dakika
+        // Supabase client (anon key ile - sadece okuma)
+        // NOT: SUPABASE_URL ve SUPABASE_ANON_KEY değerlerini Supabase Dashboard → Project Settings → API → anon/public key'den alıp buraya yazın
+        const SUPABASE_URL = 'https://gvapdwdxikctalydaoak.supabase.co'; // Supabase proje URL'inizi buraya yazın
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd2YXBkd2R4aWtjdGFseWRhb2FrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyNDY0MDIsImV4cCI6MjA4NjgyMjQwMn0.7QZqJqJqJqJqJqJqJqJqJqJqJqJqJqJqJqJqJqJqJq'; // Supabase anon/public key'inizi buraya yazın
+        let supabaseClient = null;
+        // Supabase script yüklendikten sonra client oluştur
+        if (typeof window.supabase !== 'undefined' && SUPABASE_URL && SUPABASE_ANON_KEY) {
+            try {
+                supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            } catch (err) {
+                console.error('Supabase client oluşturulamadı:', err);
+            }
+        }
+        
+        const REFRESH_INTERVAL_MS = 30 * 60 * 1000; // 30 dakika
         const ANNUAL_TARGET_EUR = 41160359; // Şimdilik hard-coded hedef
 
         // Ay kodu (01–12) → repeat guest RN (sabit veri)
@@ -758,42 +773,117 @@
             }
         }
 
-        // İlk yükleme veya periyodik güncelleme için veri çek
+        // İlk yükleme veya periyodik güncelleme için veri çek (Supabase'ten)
         async function loadDashboardData(isSilentRefresh) {
+            if (!supabaseClient) {
+                showError('Supabase bağlantısı yapılandırılmamış.');
+                return;
+            }
             try {
+                // Supabase'ten en son sync edilmiş verileri çek
                 const [
-                    todayResponse,
-                    monthlyResponse,
-                    todayRnResponse,
-                    todayRnByMonthMarketResponse,
-                    agentPerfResponse,
-                    todayAgentResponse,
-                    dailyMarketResponse,
-                    paceResponse,
-                    annualTargetResponse,
-                    mainmarketResponse
+                    todayMetricsRes,
+                    monthlyDataRes,
+                    todayRnByMonthRes,
+                    todayRnByMonthMarketRes,
+                    agentPerfRes,
+                    todayAgentRnRes,
+                    dailyMarketRnRes,
+                    bookingPaceRes,
+                    annualTargetRes,
+                    marketMainmarketRes
                 ] = await Promise.all([
-                    fetch(API_BASE + '/api/today-metrics', { credentials: 'include' }),
-                    fetch(API_BASE + '/api/monthly-data', { credentials: 'include' }),
-                    fetch(API_BASE + '/api/today-rn-by-month', { credentials: 'include' }),
-                    fetch(API_BASE + '/api/today-rn-by-month-market', { credentials: 'include' }),
-                    fetch(API_BASE + '/api/agent-performance', { credentials: 'include' }),
-                    fetch(API_BASE + '/api/today-agent-rn', { credentials: 'include' }),
-                    fetch(API_BASE + '/api/daily-market-rn', { credentials: 'include' }),
-                    fetch(API_BASE + '/api/booking-pace', { credentials: 'include' }),
-                    fetch(API_BASE + '/api/annual-target', { credentials: 'include' }),
-                    fetch(API_BASE + '/api/market-mainmarket', { credentials: 'include' })
+                    supabaseClient.from('today_metrics').select('*').order('synced_at', { ascending: false }).limit(1).single(),
+                    supabaseClient.from('monthly_data').select('*').order('synced_at', { ascending: false }).limit(12),
+                    supabaseClient.from('today_rn_by_month').select('*').order('synced_at', { ascending: false }).limit(12),
+                    supabaseClient.from('today_rn_by_month_market').select('*').order('synced_at', { ascending: false }),
+                    supabaseClient.from('agent_performance').select('*').order('synced_at', { ascending: false }),
+                    supabaseClient.from('today_agent_rn').select('*').order('synced_at', { ascending: false }),
+                    supabaseClient.from('daily_market_rn').select('*').order('synced_at', { ascending: false }),
+                    supabaseClient.from('booking_pace').select('*').order('synced_at', { ascending: false }).limit(12),
+                    supabaseClient.from('annual_target').select('*').order('synced_at', { ascending: false }).limit(1).single(),
+                    supabaseClient.from('market_mainmarket').select('*').order('synced_at', { ascending: false })
                 ]);
-                const todayData = await todayResponse.json();
-                const monthlyDataRaw = await monthlyResponse.json();
-                const todayRnRaw = await todayRnResponse.json();
-                const todayRnByMonthMarketRaw = await todayRnByMonthMarketResponse.json();
-                const agentPerfRaw = await agentPerfResponse.json();
-                const todayAgentRaw = await todayAgentResponse.json();
-                const dailyMarketRaw = await dailyMarketResponse.json();
-                const paceDataRaw = await paceResponse.json();
-                const annualTargetData = await annualTargetResponse.json();
-                const mainmarketRaw = await mainmarketResponse.json();
+                
+                // Veri formatını uyumlu hale getir (snake_case → UPPER_CASE)
+                const todayDataRaw = todayMetricsRes.data || {};
+                const todayData = {
+                    TODAY_RESERVATIONS: todayDataRaw.today_reservations || 0,
+                    TODAY_RN: todayDataRaw.today_rn || 0,
+                    TODAY_REVENUE: todayDataRaw.today_revenue || 0
+                };
+                // Supabase'ten gelen snake_case verileri UPPER_CASE'e çevir (buildMonthlyData için)
+                const monthlyDataRaw = (monthlyDataRes.data || []).map(row => ({
+                    MONTH_NUM: row.month_num,
+                    MONTH: row.month_label,
+                    TOTAL_RN: row.total_rn,
+                    TOTAL_REVENUE: row.total_revenue,
+                    AVG_RATE: row.avg_rate,
+                    TOTAL_RN_2025: row.total_rn_2025,
+                    TOTAL_REVENUE_2025: row.total_revenue_2025,
+                    AVG_RATE_2025: row.avg_rate_2025,
+                    TOTAL_RN_2024: row.total_rn_2024,
+                    TOTAL_REVENUE_2024: row.total_revenue_2024,
+                    AVG_RATE_2024: row.avg_rate_2024,
+                    TOTAL_RN_2023: row.total_rn_2023,
+                    TOTAL_REVENUE_2023: row.total_revenue_2023,
+                    AVG_RATE_2023: row.avg_rate_2023,
+                    TOTAL_RN_2022: row.total_rn_2022,
+                    TOTAL_REVENUE_2022: row.total_revenue_2022,
+                    AVG_RATE_2022: row.avg_rate_2022
+                }));
+                const todayRnRaw = (todayRnByMonthRes.data || []).map(row => ({
+                    MONTH_NUM: row.month_num,
+                    TOTAL_RN: row.total_rn,
+                    TOTAL_REVENUE: row.total_revenue,
+                    ADB: row.adb
+                }));
+                const todayRnByMonthMarketRaw = (todayRnByMonthMarketRes.data || []).map(row => ({
+                    MONTH_NUM: row.month_num,
+                    MARKET: row.market,
+                    RN: row.rn,
+                    MARKET_TOTAL: row.market_total
+                }));
+                const agentPerfRaw = (agentPerfRes.data || []).map(row => ({
+                    SEGMENT: row.segment,
+                    MARKET: row.market,
+                    REVENUE_2026: row.revenue_2026,
+                    REVENUE_2025: row.revenue_2025,
+                    AGENT_ORDER: row.agent_order
+                }));
+                const todayAgentRaw = (todayAgentRnRes.data || []).map(row => ({
+                    SEGMENT: row.segment,
+                    RN_COUNT: row.rn_count,
+                    REVENUE: row.revenue
+                }));
+                const dailyMarketRaw = { data2026: (dailyMarketRnRes.data || []).map(row => ({
+                    DATE_STR: row.date_str,
+                    MARKET: row.market,
+                    RN_COUNT: row.rn_count,
+                    MARKET_TOTAL: row.market_total
+                })), daily_2025_totals: [], daily_2024_totals: [], daily_2023_totals: [], daily_2022_totals: [] };
+                const paceDataRaw = (bookingPaceRes.data || []).map(row => ({
+                    MONTH_NUM: row.month_num,
+                    MONTH: row.month_label,
+                    LAST_30_DAYS_RN: row.last_30_days_rn,
+                    LAST_15_DAYS_RN: row.last_15_days_rn,
+                    LAST_30_DAYS_2025_RN: row.last_30_days_2025_rn,
+                    LAST_15_DAYS_2025_RN: row.last_15_days_2025_rn
+                }));
+                const annualTargetData = annualTargetRes.data ? { TOTAL_REVENUE_2026: annualTargetRes.data.total_revenue_2026 || 0 } : { TOTAL_REVENUE_2026: 0 };
+                const mainmarketRaw = (marketMainmarketRes.data || []).map(row => ({
+                    SEGMENT: row.segment,
+                    REVENUE_2026: row.revenue_2026,
+                    REVENUE_2025: row.revenue_2025,
+                    REVENUE_2024: row.revenue_2024,
+                    REVENUE_2023: row.revenue_2023,
+                    REVENUE_2022: row.revenue_2022,
+                    RN_2026: row.rn_2026,
+                    RN_2025: row.rn_2025,
+                    RN_2024: row.rn_2024,
+                    RN_2023: row.rn_2023,
+                    RN_2022: row.rn_2022
+                }));
 
                 const monthlyData = buildMonthlyData(monthlyDataRaw);
                 const todayRnData = buildTodayRnByMonthData(todayRnRaw);
@@ -833,7 +923,7 @@
             }
         }
 
-        // 15 dakikada bir arka planda sessiz güncelleme
+        // 30 dakikada bir arka planda sessiz güncelleme
         function startAutoRefresh() {
             setInterval(() => loadDashboardData(true), REFRESH_INTERVAL_MS);
         }
@@ -2154,17 +2244,20 @@
             document.getElementById('appScreen').style.display = 'block';
         }
 
+        // Login state (localStorage'da tut)
+        let currentUser = null;
+        
         async function checkAuth() {
-            try {
-                const res = await fetch(API_BASE + '/api/me', { credentials: 'include' });
-                if (res.ok) {
-                    const data = await res.json();
-                    showAppScreen(data.user && data.user.display_name);
+            const storedUser = localStorage.getItem('dashboard_user');
+            if (storedUser) {
+                try {
+                    const user = JSON.parse(storedUser);
+                    showAppScreen(user.display_name);
                     loadDashboardData(false);
                     startAutoRefresh();
                     return;
-                }
-            } catch (e) { /* ignore */ }
+                } catch (e) { /* ignore */ }
+            }
             showLoginScreen();
         }
 
@@ -2180,30 +2273,50 @@
                 errEl.style.display = 'block';
                 return;
             }
+            if (!supabaseClient) {
+                errEl.textContent = 'Supabase bağlantısı yapılandırılmamış.';
+                errEl.style.display = 'block';
+                return;
+            }
             try {
-                const res = await fetch(API_BASE + '/api/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
-                    body: JSON.stringify({ username, password })
-                });
-                const data = await res.json().catch(() => ({}));
-                if (res.ok && data.success) {
-                    showAppScreen(data.display_name);
-                    loadDashboardData(false);
-                    startAutoRefresh();
+                // Supabase'ten kullanıcıyı bul
+                const { data: user, error } = await supabaseClient
+                    .from('users')
+                    .select('id, username, password_hash, display_name, is_active')
+                    .ilike('username', username)
+                    .maybeSingle();
+                if (error || !user || !user.is_active) {
+                    errEl.textContent = 'Kullanıcı bulunamadı veya devre dışı.';
+                    errEl.style.display = 'block';
                     return;
                 }
-                errEl.textContent = data.message || 'Giriş başarısız.';
-                errEl.style.display = 'block';
+                // Parola kontrolü (bcryptjs client-side)
+                if (typeof bcrypt === 'undefined') {
+                    errEl.textContent = 'bcryptjs yüklenemedi.';
+                    errEl.style.display = 'block';
+                    return;
+                }
+                const match = bcrypt.compareSync(password, user.password_hash);
+                if (!match) {
+                    errEl.textContent = 'Parola hatalı.';
+                    errEl.style.display = 'block';
+                    return;
+                }
+                // Başarılı: kullanıcıyı localStorage'a kaydet
+                currentUser = { id: user.id, username: user.username, display_name: user.display_name || user.username };
+                localStorage.setItem('dashboard_user', JSON.stringify(currentUser));
+                showAppScreen(currentUser.display_name);
+                loadDashboardData(false);
+                startAutoRefresh();
             } catch (err) {
-                errEl.textContent = 'Bağlantı hatası. Server çalışıyor mu?';
+                errEl.textContent = 'Giriş hatası: ' + (err.message || 'Bilinmeyen hata');
                 errEl.style.display = 'block';
             }
         });
 
-        document.getElementById('btnLogout').addEventListener('click', async () => {
-            await fetch(API_BASE + '/api/logout', { credentials: 'include' });
+        document.getElementById('btnLogout').addEventListener('click', () => {
+            localStorage.removeItem('dashboard_user');
+            currentUser = null;
             showLoginScreen();
         });
 

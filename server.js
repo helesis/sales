@@ -150,6 +150,214 @@ app.get('/api/logout', (req, res) => {
   res.json({ success: true });
 });
 
+// --- Periyodik Sync Fonksiyonları (Oracle → Supabase) ---
+const SYNC_INTERVAL_MS = 30 * 60 * 1000; // 30 dakika
+const SYNC_START_HOUR = 9;   // 09:00
+const SYNC_END_HOUR = 18;    // 17:00 dahil (18'den küçük)
+
+function isWithinSyncHours() {
+  const h = new Date().getHours();
+  return h >= SYNC_START_HOUR && h < SYNC_END_HOUR;
+}
+
+// Sync: Bugünün metrikleri
+async function syncTodayMetrics() {
+  if (!supabase) return;
+  let connection;
+  try {
+    connection = await oracledb.getConnection(dbConfig);
+    const result = await connection.execute(
+      `SELECT COUNT(DISTINCT r.reservation_id) AS today_reservations,
+              COUNT(*) AS today_rn,
+              ROUND(SUM(CASE WHEN r.mainmarketcode_long = 'Local'
+                             THEN r.netpostamount / NULLIF(ex_s.exch_rate_day, 0)
+                             ELSE r.netpostamount / NULLIF(ex_d.exch_rate_day, 0) END), 0) AS today_revenue
+       FROM v8live.pro_isv_reservationinfo_voyage r
+       LEFT JOIN pro_isv_exchangerates ex_s ON ex_s.wdat_date = r.saledate AND ex_s.zcur_id = 1013
+       LEFT JOIN pro_isv_exchangerates ex_d ON ex_d.wdat_date = r.detail_date AND ex_d.zcur_id = 1013
+       WHERE r.reservationstatus = 1 AND TRUNC(r.saledate) = TRUNC(SYSDATE) AND TO_CHAR(r.detail_date, 'YYYY') = '2026'`,
+      [], { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    const data = result.rows[0] || {};
+    await upsertToSupabase('today_metrics', {
+      today_reservations: parseInt(data.TODAY_RESERVATIONS || 0),
+      today_rn: parseInt(data.TODAY_RN || 0),
+      today_revenue: parseFloat(data.TODAY_REVENUE || 0)
+    }, true);
+    console.log('>>> Sync: today_metrics');
+  } catch (err) {
+    console.error('>>> Sync hatası (today_metrics):', err.message);
+  } finally {
+    if (connection) await connection.close();
+  }
+}
+
+// Sync: Aylık veriler
+async function syncMonthlyData() {
+  if (!supabase) return;
+  let connection;
+  try {
+    connection = await oracledb.getConnection(dbConfig);
+    const result = await connection.execute(
+      `WITH m AS (
+          SELECT '01' month_num FROM dual UNION ALL SELECT '02' FROM dual UNION ALL SELECT '03' FROM dual UNION ALL
+          SELECT '04' FROM dual UNION ALL SELECT '05' FROM dual UNION ALL SELECT '06' FROM dual UNION ALL
+          SELECT '07' FROM dual UNION ALL SELECT '08' FROM dual UNION ALL SELECT '09' FROM dual UNION ALL
+          SELECT '10' FROM dual UNION ALL SELECT '11' FROM dual UNION ALL SELECT '12' FROM dual
+      ),
+      d2026 AS (
+          SELECT TO_CHAR(r.detail_date, 'MM') AS month_num,
+                 COUNT(*) AS total_rn,
+                 ROUND(SUM(CASE WHEN r.mainmarketcode_long = 'Local' THEN r.netpostamount / NULLIF(ex_s.exch_rate_day, 0)
+                               ELSE r.netpostamount / NULLIF(ex_d.exch_rate_day, 0) END), 0) AS total_revenue,
+                 ROUND(SUM(CASE WHEN r.mainmarketcode_long = 'Local' THEN r.netpostamount / NULLIF(ex_s.exch_rate_day, 0)
+                               ELSE r.netpostamount / NULLIF(ex_d.exch_rate_day, 0) END)
+                       / NULLIF(SUM(r.noofadults + NVL(r.ca3, 0) / 2), 0), 2) AS avg_rate
+          FROM v8live.pro_isv_reservationinfo_voyage r
+          LEFT JOIN pro_isv_exchangerates ex_s ON ex_s.wdat_date = r.saledate AND ex_s.zcur_id = 1013
+          LEFT JOIN pro_isv_exchangerates ex_d ON ex_d.wdat_date = r.detail_date AND ex_d.zcur_id = 1013
+          WHERE r.reservationstatus = 1 AND TO_CHAR(r.detail_date, 'YYYY') = '2026'
+            AND r.saledate <= TRUNC(SYSDATE)
+          GROUP BY TO_CHAR(r.detail_date, 'MM')
+      ),
+      d2025 AS (
+          SELECT TO_CHAR(r.detail_date, 'MM') AS month_num,
+                 COUNT(*) AS total_rn_2025,
+                 ROUND(SUM(CASE WHEN r.mainmarketcode_long = 'Local' THEN r.netpostamount / NULLIF(ex_s.exch_rate_day, 0)
+                               ELSE r.netpostamount / NULLIF(ex_d.exch_rate_day, 0) END), 0) AS total_revenue_2025,
+                 ROUND(SUM(CASE WHEN r.mainmarketcode_long = 'Local' THEN r.netpostamount / NULLIF(ex_s.exch_rate_day, 0)
+                               ELSE r.netpostamount / NULLIF(ex_d.exch_rate_day, 0) END)
+                       / NULLIF(SUM(r.noofadults + NVL(r.ca3, 0) / 2), 0), 2) AS avg_rate_2025
+          FROM v8live.pro_isv_reservationinfo_voyage r
+          LEFT JOIN pro_isv_exchangerates ex_s ON ex_s.wdat_date = r.saledate AND ex_s.zcur_id = 1013
+          LEFT JOIN pro_isv_exchangerates ex_d ON ex_d.wdat_date = r.detail_date AND ex_d.zcur_id = 1013
+          WHERE r.reservationstatus = 1 AND TO_CHAR(r.detail_date, 'YYYY') = '2025'
+            AND r.saledate <= ADD_MONTHS(TRUNC(SYSDATE), -12)
+          GROUP BY TO_CHAR(r.detail_date, 'MM')
+      ),
+      d2024 AS (
+          SELECT TO_CHAR(r.detail_date, 'MM') AS month_num,
+                 COUNT(*) AS total_rn_2024,
+                 ROUND(SUM(CASE WHEN r.mainmarketcode_long = 'Local' THEN r.netpostamount / NULLIF(ex_s.exch_rate_day, 0)
+                               ELSE r.netpostamount / NULLIF(ex_d.exch_rate_day, 0) END), 0) AS total_revenue_2024,
+                 ROUND(SUM(CASE WHEN r.mainmarketcode_long = 'Local' THEN r.netpostamount / NULLIF(ex_s.exch_rate_day, 0)
+                               ELSE r.netpostamount / NULLIF(ex_d.exch_rate_day, 0) END)
+                       / NULLIF(SUM(r.noofadults + NVL(r.ca3, 0) / 2), 0), 2) AS avg_rate_2024
+          FROM v8live.pro_isv_reservationinfo_voyage r
+          LEFT JOIN pro_isv_exchangerates ex_s ON ex_s.wdat_date = r.saledate AND ex_s.zcur_id = 1013
+          LEFT JOIN pro_isv_exchangerates ex_d ON ex_d.wdat_date = r.detail_date AND ex_d.zcur_id = 1013
+          WHERE r.reservationstatus = 1 AND TO_CHAR(r.detail_date, 'YYYY') = '2024'
+            AND r.saledate <= ADD_MONTHS(TRUNC(SYSDATE), -24)
+          GROUP BY TO_CHAR(r.detail_date, 'MM')
+      ),
+      d2023 AS (
+          SELECT TO_CHAR(r.detail_date, 'MM') AS month_num,
+                 COUNT(*) AS total_rn_2023,
+                 ROUND(SUM(CASE WHEN r.mainmarketcode_long = 'Local' THEN r.netpostamount / NULLIF(ex_s.exch_rate_day, 0)
+                               ELSE r.netpostamount / NULLIF(ex_d.exch_rate_day, 0) END), 0) AS total_revenue_2023,
+                 ROUND(SUM(CASE WHEN r.mainmarketcode_long = 'Local' THEN r.netpostamount / NULLIF(ex_s.exch_rate_day, 0)
+                               ELSE r.netpostamount / NULLIF(ex_d.exch_rate_day, 0) END)
+                       / NULLIF(SUM(r.noofadults + NVL(r.ca3, 0) / 2), 0), 2) AS avg_rate_2023
+          FROM v8live.pro_isv_reservationinfo_voyage r
+          LEFT JOIN pro_isv_exchangerates ex_s ON ex_s.wdat_date = r.saledate AND ex_s.zcur_id = 1013
+          LEFT JOIN pro_isv_exchangerates ex_d ON ex_d.wdat_date = r.detail_date AND ex_d.zcur_id = 1013
+          WHERE r.reservationstatus = 1 AND TO_CHAR(r.detail_date, 'YYYY') = '2023'
+            AND r.saledate <= ADD_MONTHS(TRUNC(SYSDATE), -36)
+          GROUP BY TO_CHAR(r.detail_date, 'MM')
+      ),
+      d2022 AS (
+          SELECT TO_CHAR(r.detail_date, 'MM') AS month_num,
+                 COUNT(*) AS total_rn_2022,
+                 ROUND(SUM(CASE WHEN r.mainmarketcode_long = 'Local' THEN r.netpostamount / NULLIF(ex_s.exch_rate_day, 0)
+                               ELSE r.netpostamount / NULLIF(ex_d.exch_rate_day, 0) END), 0) AS total_revenue_2022,
+                 ROUND(SUM(CASE WHEN r.mainmarketcode_long = 'Local' THEN r.netpostamount / NULLIF(ex_s.exch_rate_day, 0)
+                               ELSE r.netpostamount / NULLIF(ex_d.exch_rate_day, 0) END)
+                       / NULLIF(SUM(r.noofadults + NVL(r.ca3, 0) / 2), 0), 2) AS avg_rate_2022
+          FROM v8live.pro_isv_reservationinfo_voyage r
+          LEFT JOIN pro_isv_exchangerates ex_s ON ex_s.wdat_date = r.saledate AND ex_s.zcur_id = 1013
+          LEFT JOIN pro_isv_exchangerates ex_d ON ex_d.wdat_date = r.detail_date AND ex_d.zcur_id = 1013
+          WHERE r.reservationstatus = 1 AND TO_CHAR(r.detail_date, 'YYYY') = '2022'
+            AND r.saledate <= ADD_MONTHS(TRUNC(SYSDATE), -48)
+          GROUP BY TO_CHAR(r.detail_date, 'MM')
+      )
+      SELECT CASE m.month_num WHEN '01' THEN 'Jan' WHEN '02' THEN 'Feb' WHEN '03' THEN 'Mar' WHEN '04' THEN 'Apr'
+              WHEN '05' THEN 'May' WHEN '06' THEN 'Jun' WHEN '07' THEN 'Jul' WHEN '08' THEN 'Aug'
+              WHEN '09' THEN 'Sep' WHEN '10' THEN 'Oct' WHEN '11' THEN 'Nov' WHEN '12' THEN 'Dec' END AS month,
+             m.month_num,
+             NVL(d2026.total_rn, 0) AS total_rn,
+             NVL(d2026.total_revenue, 0) AS total_revenue,
+             NVL(d2026.avg_rate, 0) AS avg_rate,
+             NVL(d2025.total_rn_2025, 0) AS total_rn_2025,
+             NVL(d2025.total_revenue_2025, 0) AS total_revenue_2025,
+             NVL(d2025.avg_rate_2025, 0) AS avg_rate_2025,
+             NVL(d2024.total_rn_2024, 0) AS total_rn_2024,
+             NVL(d2024.total_revenue_2024, 0) AS total_revenue_2024,
+             NVL(d2024.avg_rate_2024, 0) AS avg_rate_2024,
+             NVL(d2023.total_rn_2023, 0) AS total_rn_2023,
+             NVL(d2023.total_revenue_2023, 0) AS total_revenue_2023,
+             NVL(d2023.avg_rate_2023, 0) AS avg_rate_2023,
+             NVL(d2022.total_rn_2022, 0) AS total_rn_2022,
+             NVL(d2022.total_revenue_2022, 0) AS total_revenue_2022,
+             NVL(d2022.avg_rate_2022, 0) AS avg_rate_2022
+      FROM m
+      LEFT JOIN d2026 ON m.month_num = d2026.month_num
+      LEFT JOIN d2025 ON m.month_num = d2025.month_num
+      LEFT JOIN d2024 ON m.month_num = d2024.month_num
+      LEFT JOIN d2023 ON m.month_num = d2023.month_num
+      LEFT JOIN d2022 ON m.month_num = d2022.month_num
+      ORDER BY m.month_num`,
+      [], { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    const supabaseData = (result.rows || []).map(row => ({
+      month_num: row.MONTH_NUM || '',
+      month_label: row.MONTH || '',
+      total_rn: parseInt(row.TOTAL_RN || 0),
+      total_revenue: parseFloat(row.TOTAL_REVENUE || 0),
+      avg_rate: parseFloat(row.AVG_RATE || 0),
+      total_rn_2025: parseInt(row.TOTAL_RN_2025 || 0),
+      total_revenue_2025: parseFloat(row.TOTAL_REVENUE_2025 || 0),
+      avg_rate_2025: parseFloat(row.AVG_RATE_2025 || 0),
+      total_rn_2024: parseInt(row.TOTAL_RN_2024 || 0),
+      total_revenue_2024: parseFloat(row.TOTAL_REVENUE_2024 || 0),
+      avg_rate_2024: parseFloat(row.AVG_RATE_2024 || 0),
+      total_rn_2023: parseInt(row.TOTAL_RN_2023 || 0),
+      total_revenue_2023: parseFloat(row.TOTAL_REVENUE_2023 || 0),
+      avg_rate_2023: parseFloat(row.AVG_RATE_2023 || 0),
+      total_rn_2022: parseInt(row.TOTAL_RN_2022 || 0),
+      total_revenue_2022: parseFloat(row.TOTAL_REVENUE_2022 || 0),
+      avg_rate_2022: parseFloat(row.AVG_RATE_2022 || 0)
+    }));
+    await syncToSupabase('monthly_data', supabaseData, true);
+    console.log('>>> Sync: monthly_data');
+  } catch (err) {
+    console.error('>>> Sync hatası (monthly_data):', err.message);
+  } finally {
+    if (connection) await connection.close();
+  }
+}
+
+// Sync: Tüm verileri senkronize et
+async function syncAllData() {
+  if (!isWithinSyncHours()) {
+    console.log('>>> Sync atlandı: Saat 09:00-17:00 dışında');
+    return;
+  }
+  console.log('>>> Periyodik sync başlıyor...');
+  await syncTodayMetrics();
+  await syncMonthlyData();
+  // Diğer sync fonksiyonları da eklenebilir (today-agent-rn, booking-pace, vb.)
+  console.log('>>> Periyodik sync tamamlandı');
+}
+
+// Periyodik sync başlat
+function startPeriodicSync() {
+  // İlk sync'i hemen çalıştır (eğer saat uygunsa)
+  syncAllData();
+  // Sonra her 30 dakikada bir
+  setInterval(() => syncAllData(), SYNC_INTERVAL_MS);
+  console.log('>>> Periyodik sync aktif: 30 dakikada bir (09:00-17:00)');
+}
+
 // Dashboard sayfası (login sonrası gösterilecek)
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'dashboard.html'));
@@ -1419,6 +1627,10 @@ app.get('/api/supabase-status', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log('=== Server hazır: http://localhost:' + PORT + ' ===');
-  if (!supabase) console.log('>>> Supabase: .env içinde SUPABASE_URL ve SUPABASE_SERVICE_ROLE_KEY tanımlayın.');
-  else console.log('>>> Supabase: Bağlantı yapılandırıldı.');
+  if (!supabase) {
+    console.log('>>> Supabase: .env içinde SUPABASE_URL ve SUPABASE_SERVICE_ROLE_KEY tanımlayın.');
+  } else {
+    console.log('>>> Supabase: Bağlantı yapılandırıldı.');
+    startPeriodicSync();
+  }
 });
