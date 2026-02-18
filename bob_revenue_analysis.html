@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BOB Revenue Analysis — 5 Year</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="vendor/chart.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f1f5f9;
+            color: #1e293b;
+            padding: 24px;
+            min-height: 100vh;
+        }
+        .page { max-width: 1400px; margin: 0 auto; }
+
+        .metric-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+        .metric-tab {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            background: #e2e8f0;
+            color: #475569;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, color 0.2s;
+        }
+        .metric-tab:hover { background: #cbd5e1; color: #334155; }
+        .metric-tab.active { background: #667eea; color: #fff; }
+
+        .kpi-bar {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .metric-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .metric-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+        }
+        .metric-card .label { font-size: 0.9em; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+        .metric-card .value { font-size: 2em; font-weight: bold; color: #667eea; margin-bottom: 6px; }
+        .metric-card .subtext { font-size: 0.85em; color: #999; }
+        .yoy-badge {
+            display: inline-block;
+            margin-top: 8px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+        .yoy-badge.positive { background: #dcfce7; color: #16a34a; }
+        .yoy-badge.negative { background: #fee2e2; color: #dc2626; }
+        .yoy-badge.neutral { background: #f1f5f9; color: #64748b; }
+
+        .chart-card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 24px;
+        }
+        .chart-card h3 {
+            color: #333;
+            margin-bottom: 16px;
+            font-size: 1.1em;
+            border-left: 4px solid #667eea;
+            padding-left: 12px;
+        }
+        .legend-pills {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .legend-pill {
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            user-select: none;
+            border: 1px solid transparent;
+        }
+        .legend-pill:hover { opacity: 0.9; }
+        .legend-pill.inactive { opacity: 0.4; text-decoration: line-through; }
+        .month-selector {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 12px;
+        }
+        .month-btn {
+            padding: 6px 12px;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+            background: #f8fafc;
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+        .month-btn:hover { background: #e2e8f0; }
+        .month-btn.active { background: #667eea; color: #fff; border-color: #667eea; }
+        .chart-wrap { position: relative; height: 360px; }
+        .chart-wrap canvas { max-height: 360px; }
+        .loading-msg { text-align: center; padding: 40px; color: #64748b; }
+    </style>
+</head>
+<body>
+<div class="page">
+    <div class="metric-tabs">
+        <button type="button" class="metric-tab active" data-metric="revenue">Revenue</button>
+        <button type="button" class="metric-tab" data-metric="adb">ADB</button>
+        <button type="button" class="metric-tab" data-metric="rn">Room Nights</button>
+    </div>
+
+    <div class="kpi-bar" id="kpiBar">
+        <!-- filled by JS -->
+    </div>
+
+    <div class="chart-card">
+        <h3>Monthly BOB — by Year</h3>
+        <div class="legend-pills" id="legendYears"></div>
+        <div class="chart-wrap"><canvas id="chartMonthly"></canvas></div>
+    </div>
+
+    <div class="chart-card">
+        <h3>Market Breakdown — by Month</h3>
+        <div class="legend-pills" id="legendMarkets"></div>
+        <div class="month-selector" id="monthSelector"></div>
+        <div class="chart-wrap"><canvas id="chartStacked"></canvas></div>
+    </div>
+
+    <div class="chart-card">
+        <h3>Year-over-Year Change % — by Market</h3>
+        <div class="chart-wrap"><canvas id="chartYoY"></canvas></div>
+    </div>
+</div>
+
+<script>
+(function() {
+    const SUPABASE_URL = 'https://gvapdwdxikctalydaoak.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd2YXBkd2R4aWtjdGFseWRhb2FrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyNDY0MDIsImV4cCI6MjA4NjgyMjQwMn0.35f3j7MUDBzXWKxyZp4oiX-koRWW0AlufqrC61jM7xE';
+    let supabaseClient = null;
+    if (typeof window.supabase !== 'undefined' && SUPABASE_URL && SUPABASE_ANON_KEY) {
+        try { supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } catch (e) { console.error('Supabase:', e); }
+    }
+
+    const colors = {
+        primary: '#667eea',
+        secondary: '#764ba2',
+        markets: [
+            '#2563eb', '#ea580c', '#16a34a', '#9333ea', '#dc2626',
+            '#0891b2', '#ca8a04', '#c026d3', '#059669', '#0284c7',
+            '#65a30d', '#be185d', '#6366f1', '#e11d48', '#84cc16'
+        ],
+        years: { 2022: '#4ade80', 2023: '#60a5fa', 2024: '#f472b6', 2025: '#fb923c', 2026: '#f0a500' }
+    };
+
+    const YEARS = [2022, 2023, 2024, 2025, 2026];
+    const MONTH_LABELS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+    // DATA[year][monthIndex][market] = { revenue, pax, rn }
+    let DATA = {};
+    let marketsList = [];
+    let currentMetric = 'revenue'; // 'revenue' | 'adb' | 'rn'
+    let selectedMonthIndex = 0;   // 0-11 for stacked chart
+    let yearVisible = { 2022: true, 2023: true, 2024: true, 2025: true, 2026: true };
+    let marketVisible = {};
+
+    let chartMonthly, chartStacked, chartYoY;
+
+    function buildDataFromRows(rows) {
+        const data = {};
+        const marketsSet = new Set();
+        YEARS.forEach(y => { data[y] = []; for (let m = 0; m < 12; m++) data[y][m] = {}; });
+        (rows || []).forEach(r => {
+            let monthNum = r.month_num ?? r.MONTH_NUM ?? '';
+            if (typeof monthNum === 'number') monthNum = String(monthNum).padStart(2, '0');
+            else monthNum = String(monthNum).trim();
+            const monthIndex = parseInt(monthNum, 10) - 1;
+            if (monthIndex < 0 || monthIndex > 11) return;
+            const market = r.market != null ? String(r.market) : (r.MARKET != null ? String(r.MARKET) : null);
+            const year = parseInt(r.year || r.YEAR || 0, 10);
+            if (!YEARS.includes(year)) return;
+            if (market) marketsSet.add(market);
+            const revenue = parseFloat(r.bob_revenue || r.BOB_REVENUE || 0);
+            const pax = parseInt(r.bob_pax || r.BOB_PAX || 0, 10);
+            const rn = parseInt(r.bob_rn || r.BOB_RN || 0, 10);
+            if (!data[year][monthIndex][market || '']) data[year][monthIndex][market || ''] = { revenue: 0, pax: 0, rn: 0 };
+            data[year][monthIndex][market || ''].revenue += revenue;
+            data[year][monthIndex][market || ''].pax += pax;
+            data[year][monthIndex][market || ''].rn += rn;
+        });
+        marketsList = Array.from(marketsSet).sort();
+        marketsList.forEach(m => { marketVisible[m] = true; });
+        return data;
+    }
+
+    function getMockData() {
+        const rows = [];
+        const mk = ['Local', 'Great Britain', 'Russia', 'West Europe', 'Germany'];
+        for (let y of YEARS) {
+            for (let m = 1; m <= 12; m++) {
+                const monthNum = (m < 10 ? '0' : '') + m;
+                for (let k of mk) {
+                    const rev = 80000 + Math.random() * 120000 + (y - 2022) * 15000;
+                    const pax = Math.floor(200 + Math.random() * 400);
+                    rows.push({ month_num: monthNum, market: k, year: y, bob_revenue: Math.round(rev), bob_pax: pax, bob_rn: Math.floor(pax * 1.2) });
+                }
+            }
+        }
+        return rows;
+    }
+
+    function getYearTotals(data) {
+        const totals = {};
+        YEARS.forEach(y => {
+            let rev = 0, pax = 0, rn = 0;
+            for (let m = 0; m < 12; m++) {
+                const monthData = data[y][m] || {};
+                Object.keys(monthData).forEach(mkt => {
+                    rev += monthData[mkt].revenue || 0;
+                    pax += monthData[mkt].pax || 0;
+                    rn += monthData[mkt].rn || 0;
+                });
+            }
+            totals[y] = { revenue: rev, pax, rn, adb: pax ? rev / pax : 0 };
+        });
+        return totals;
+    }
+
+    function formatValue(val, metric) {
+        if (val == null || isNaN(val)) return '–';
+        if (metric === 'revenue') return '€' + Math.round(val).toLocaleString('tr-TR');
+        if (metric === 'adb') return '€' + Math.round(val).toLocaleString('tr-TR');
+        if (metric === 'rn') return Math.round(val).toLocaleString('tr-TR');
+        return String(val);
+    }
+
+    function renderKpis(totals) {
+        const bar = document.getElementById('kpiBar');
+        bar.innerHTML = YEARS.map((y, i) => {
+            const t = totals[y] || { revenue: 0, pax: 0, rn: 0, adb: 0 };
+            const prev = i > 0 ? totals[YEARS[i - 1]] : null;
+            let val = 0, yoy = null;
+            if (currentMetric === 'revenue') { val = t.revenue; if (prev && prev.revenue) yoy = ((t.revenue - prev.revenue) / prev.revenue) * 100; }
+            else if (currentMetric === 'adb') { val = t.adb; if (prev && prev.adb) yoy = ((t.adb - prev.adb) / prev.adb) * 100; }
+            else { val = t.rn; if (prev && prev.rn) yoy = ((t.rn - prev.rn) / prev.rn) * 100; }
+            const yoyClass = yoy == null ? 'neutral' : (yoy >= 0 ? 'positive' : 'negative');
+            const yoyText = yoy != null ? (yoy >= 0 ? '+' : '') + yoy.toFixed(1) + '% YoY' : '—';
+            const label = currentMetric === 'revenue' ? 'BOB Revenue' : (currentMetric === 'adb' ? 'ADB' : 'Room Nights');
+            return '<div class="metric-card"><div class="label">' + y + '</div><div class="value">' + formatValue(val, currentMetric) + '</div><div class="subtext">' + label + '</div><span class="yoy-badge ' + yoyClass + '">' + yoyText + '</span></div>';
+        }).join('');
+    }
+
+    function buildMonthlySeries(data) {
+        const series = [];
+        YEARS.forEach(y => {
+            if (!yearVisible[y]) return;
+            const arr = [];
+            for (let m = 0; m < 12; m++) {
+                let v = 0;
+                const monthData = data[y][m] || {};
+                Object.keys(monthData).forEach(mkt => {
+                    if (mkt && marketVisible[mkt] !== false) {
+                        if (currentMetric === 'revenue') v += monthData[mkt].revenue || 0;
+                        else if (currentMetric === 'adb') v += (monthData[mkt].pax && monthData[mkt].revenue) ? monthData[mkt].revenue / monthData[mkt].pax : 0;
+                        else v += monthData[mkt].rn || 0;
+                    }
+                });
+                if (currentMetric === 'adb' && Object.keys(monthData).length) {
+                    let totalRev = 0, totalPax = 0;
+                    Object.keys(monthData).forEach(mkt => { if (mkt && marketVisible[mkt] !== false) { totalRev += monthData[mkt].revenue || 0; totalPax += monthData[mkt].pax || 0; } });
+                    v = totalPax ? totalRev / totalPax : 0;
+                }
+                arr.push(v);
+            }
+            series.push({ year: y, data: arr, color: colors.years[y] });
+        });
+        return series;
+    }
+
+    function buildStackedForMonth(data, monthIndex) {
+        const datasets = [];
+        marketsList.forEach((mkt, i) => {
+            if (marketVisible[mkt] === false) return;
+            const vals = YEARS.map(y => {
+                const cell = (data[y] && data[y][monthIndex] && data[y][monthIndex][mkt]) || {};
+                if (currentMetric === 'revenue') return cell.revenue || 0;
+                if (currentMetric === 'adb') return (cell.pax && cell.revenue) ? cell.revenue / cell.pax : 0;
+                return cell.rn || 0;
+            });
+            datasets.push({ market: mkt, data: vals, color: colors.markets[i % colors.markets.length] });
+        });
+        return datasets;
+    }
+
+    function buildYoYChange(data) {
+        const labels = ['2022→2023', '2023→2024', '2024→2025', '2025→2026'];
+        const marketSeries = {};
+        marketsList.forEach(mkt => {
+            const vals = [];
+            for (let i = 1; i < YEARS.length; i++) {
+                const prevY = YEARS[i - 1], currY = YEARS[i];
+                let prevV = 0, currV = 0;
+                if (currentMetric === 'revenue' || currentMetric === 'rn') {
+                    for (let m = 0; m < 12; m++) {
+                        const p = (data[prevY] && data[prevY][m] && data[prevY][m][mkt]) || {};
+                        const c = (data[currY] && data[currY][m] && data[currY][m][mkt]) || {};
+                        if (currentMetric === 'revenue') { prevV += p.revenue || 0; currV += c.revenue || 0; }
+                        else { prevV += p.rn || 0; currV += c.rn || 0; }
+                    }
+                } else {
+                    let prevRev = 0, prevPax = 0, currRev = 0, currPax = 0;
+                    for (let m = 0; m < 12; m++) {
+                        const p = (data[prevY] && data[prevY][m] && data[prevY][m][mkt]) || {};
+                        const c = (data[currY] && data[currY][m] && data[currY][m][mkt]) || {};
+                        prevRev += p.revenue || 0; prevPax += p.pax || 0;
+                        currRev += c.revenue || 0; currPax += c.pax || 0;
+                    }
+                    prevV = prevPax ? prevRev / prevPax : 0;
+                    currV = currPax ? currRev / currPax : 0;
+                }
+                const pct = prevV ? ((currV - prevV) / prevV) * 100 : 0;
+                vals.push(pct);
+            }
+            marketSeries[mkt] = vals;
+        });
+        return { labels, marketSeries };
+    }
+
+    function updateChartMonthly() {
+        const series = buildMonthlySeries(DATA);
+        const labels = MONTH_LABELS;
+        if (!chartMonthly) {
+            chartMonthly = new Chart(document.getElementById('chartMonthly'), {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: series.map(s => ({ label: String(s.year), data: s.data, borderColor: s.color, backgroundColor: s.color + '20', fill: false, tension: 0.3 }))
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { x: { grid: { display: false } }, y: { beginAtZero: true } }
+                }
+            });
+        } else {
+            chartMonthly.data.labels = labels;
+            chartMonthly.data.datasets = series.map(s => ({ label: String(s.year), data: s.data, borderColor: s.color, backgroundColor: s.color + '20', fill: false, tension: 0.3 }));
+            chartMonthly.update('none');
+        }
+    }
+
+    function updateChartStacked() {
+        const datasets = buildStackedForMonth(DATA, selectedMonthIndex);
+        const labels = YEARS.map(String);
+        const chartData = datasets.map(d => ({ label: d.market, data: d.data, backgroundColor: d.color }));
+        if (!chartStacked) {
+            chartStacked = new Chart(document.getElementById('chartStacked'), {
+                type: 'bar',
+                data: { labels, datasets: chartData },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { stacked: true, grid: { display: false } },
+                        y: { stacked: true, beginAtZero: true }
+                    }
+                }
+            });
+        } else {
+            chartStacked.data.labels = labels;
+            chartStacked.data.datasets = chartData;
+            chartStacked.update('none');
+        }
+    }
+
+    function updateChartYoY() {
+        const { labels, marketSeries } = buildYoYChange(DATA);
+        const datasets = marketsList.map((mkt, i) => ({
+            label: mkt,
+            data: marketSeries[mkt] || [],
+            backgroundColor: colors.markets[i % colors.markets.length]
+        }));
+        if (!chartYoY) {
+            chartYoY = new Chart(document.getElementById('chartYoY'), {
+                type: 'bar',
+                data: { labels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: true } },
+                    scales: {
+                        x: { grid: { display: false } },
+                        y: { beginAtZero: false, title: { display: true, text: 'YoY %' } }
+                    }
+                }
+            });
+        } else {
+            chartYoY.data.labels = labels;
+            chartYoY.data.datasets = datasets;
+            chartYoY.update('none');
+        }
+    }
+
+    function renderYearPills() {
+        const el = document.getElementById('legendYears');
+        el.innerHTML = YEARS.map(y => '<span class="legend-pill ' + (yearVisible[y] ? '' : 'inactive') + '" data-year="' + y + '" style="background:' + colors.years[y] + '20;color:' + colors.years[y] + ';">' + y + '</span>').join('');
+        el.querySelectorAll('.legend-pill').forEach(pill => {
+            pill.addEventListener('click', () => {
+                yearVisible[pill.dataset.year] = !yearVisible[pill.dataset.year];
+                pill.classList.toggle('inactive', !yearVisible[pill.dataset.year]);
+                updateChartMonthly();
+            });
+        });
+    }
+
+    function renderMarketPills() {
+        const el = document.getElementById('legendMarkets');
+        el.innerHTML = marketsList.map((m, i) => '<span class="legend-pill ' + (marketVisible[m] !== false ? '' : 'inactive') + '" data-market="' + m + '" style="background:' + colors.markets[i % colors.markets.length] + '20;color:' + colors.markets[i % colors.markets.length] + ';">' + m + '</span>').join('');
+        el.querySelectorAll('.legend-pill').forEach(pill => {
+            pill.addEventListener('click', () => {
+                const m = pill.dataset.market;
+                marketVisible[m] = marketVisible[m] === false;
+                pill.classList.toggle('inactive', marketVisible[m] === false);
+                updateChartMonthly();
+                updateChartStacked();
+            });
+        });
+    }
+
+    function renderMonthSelector() {
+        const el = document.getElementById('monthSelector');
+        el.innerHTML = MONTH_LABELS.map((lbl, i) => '<button type="button" class="month-btn ' + (i === selectedMonthIndex ? 'active' : '') + '" data-month="' + i + '">' + lbl + '</button>').join('');
+        el.querySelectorAll('.month-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                selectedMonthIndex = parseInt(btn.dataset.month, 10);
+                el.querySelectorAll('.month-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                updateChartStacked();
+            });
+        });
+    }
+
+    function setMetric(metric) {
+        currentMetric = metric;
+        document.querySelectorAll('.metric-tab').forEach(t => t.classList.toggle('active', t.dataset.metric === metric));
+        const totals = getYearTotals(DATA);
+        renderKpis(totals);
+        updateChartMonthly();
+        updateChartStacked();
+        updateChartYoY();
+    }
+
+    async function load() {
+        let rows = [];
+        if (supabaseClient) {
+            const { data, error } = await supabaseClient.from('bob_revenue_analysis').select('*');
+            if (!error && data && data.length) rows = data;
+        }
+        if (rows.length === 0) {
+            console.warn('BOB Revenue Analysis: Supabase table empty or missing; using mock data.');
+            rows = getMockData();
+        }
+        DATA = buildDataFromRows(rows);
+        const totals = getYearTotals(DATA);
+        renderKpis(totals);
+        renderYearPills();
+        renderMarketPills();
+        renderMonthSelector();
+        updateChartMonthly();
+        updateChartStacked();
+        updateChartYoY();
+
+        document.querySelectorAll('.metric-tab').forEach(tab => {
+            tab.addEventListener('click', () => setMetric(tab.dataset.metric));
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', load);
+})();
+</script>
+</body>
+</html>

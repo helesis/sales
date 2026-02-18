@@ -522,6 +522,53 @@ ORDER BY Pazar`,
   }
 }
 
+// Sync: BOB Revenue Analysis (Oracle → Supabase bob_revenue_analysis)
+async function syncBobRevenueAnalysis() {
+  if (!supabase) return;
+  let connection;
+  try {
+    connection = await oracledb.getConnection(dbConfig);
+    const result = await connection.execute(
+      `SELECT
+          TO_CHAR(r.detail_date, 'MM') AS month_num,
+          r.mainmarketcode_long AS market,
+          TO_NUMBER(TO_CHAR(r.detail_date, 'YYYY')) AS year,
+          SUM(CASE WHEN r.mainmarketcode_long = 'Local'
+                   THEN r.netpostamount / NULLIF(ex_s.exch_rate_day, 0)
+                   ELSE r.netpostamount / NULLIF(ex_d.exch_rate_day, 0) END) AS bob_revenue,
+          SUM(r.noofadults + NVL(r.ca3, 0) / 2) AS bob_pax,
+          COUNT(*) AS bob_rn
+       FROM v8live.pro_isv_reservationinfo_voyage r
+       LEFT JOIN pro_isv_exchangerates ex_s ON ex_s.wdat_date = r.saledate AND ex_s.zcur_id = 1013
+       LEFT JOIN pro_isv_exchangerates ex_d ON ex_d.wdat_date = r.detail_date AND ex_d.zcur_id = 1013
+       WHERE r.reservationstatus = 1
+         AND TO_CHAR(r.detail_date, 'YYYY') IN ('2022','2023','2024','2025','2026')
+         AND r.saledate <= ADD_MONTHS(
+               TRUNC(SYSDATE),
+               -12 * (2026 - TO_NUMBER(TO_CHAR(r.detail_date, 'YYYY')))
+             )
+       GROUP BY TO_CHAR(r.detail_date, 'MM'), r.mainmarketcode_long, TO_NUMBER(TO_CHAR(r.detail_date, 'YYYY'))`,
+      [],
+      { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    const rows = result.rows || [];
+    const supabaseData = rows.map(row => ({
+      month_num: String(row.MONTH_NUM ?? row.month_num ?? '').replace(/^(\d)$/, '0$1'),
+      market: row.MARKET ?? row.market ?? null,
+      year: parseInt(row.YEAR ?? row.year ?? 0, 10),
+      bob_revenue: parseFloat(row.BOB_REVENUE ?? row.bob_revenue ?? 0),
+      bob_pax: parseInt(row.BOB_PAX ?? row.bob_pax ?? 0, 10),
+      bob_rn: parseInt(row.BOB_RN ?? row.bob_rn ?? 0, 10)
+    })).filter(r => r.month_num && r.year >= 2022 && r.year <= 2026);
+    if (supabaseData.length > 0) await syncToSupabase('bob_revenue_analysis', supabaseData, true);
+    console.log('>>> Sync: bob_revenue_analysis');
+  } catch (err) {
+    console.error('>>> Sync hatası (bob_revenue_analysis):', err.message);
+  } finally {
+    if (connection) await connection.close();
+  }
+}
+
 // Sync: Tüm verileri senkronize et
 async function syncAllData() {
   if (!isWithinSyncHours()) {
@@ -533,6 +580,7 @@ async function syncAllData() {
   await syncMonthlyData();
   await syncRnHeatmap();
   await syncAlosAdbHeatmap();
+  await syncBobRevenueAnalysis();
   console.log('>>> Periyodik sync tamamlandı');
 }
 
@@ -1786,6 +1834,17 @@ ORDER BY Pazar`,
     if (connection) {
       await connection.close();
     }
+  }
+});
+
+// BOB Revenue Analysis sync (manuel tetikleme)
+app.get('/api/sync-bob-revenue', async (req, res) => {
+  try {
+    await syncBobRevenueAnalysis();
+    return res.json({ success: true, message: 'bob_revenue_analysis sync tamamlandı' });
+  } catch (err) {
+    console.error('>>> /api/sync-bob-revenue:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
