@@ -613,7 +613,7 @@
         // Supabase client (anon key ile - sadece okuma)
         // NOT: SUPABASE_URL ve SUPABASE_ANON_KEY değerlerini Supabase Dashboard → Project Settings → API → anon/public key'den alıp buraya yazın
         const SUPABASE_URL = 'https://gvapdwdxikctalydaoak.supabase.co'; // Supabase proje URL'inizi buraya yazın
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd2YXBkd2R4aWtjdGFseWRhb2FrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyNDY0MDIsImV4cCI6MjA4NjgyMjQwMn0.7QZqJqJqJqJqJqJqJqJqJqJqJqJqJqJqJqJqJqJqJq'; // Supabase anon/public key'inizi buraya yazın
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd2YXBkd2R4aWtjdGFseWRhb2FrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyNDY0MDIsImV4cCI6MjA4NjgyMjQwMn0.35f3j7MUDBzXWKxyZp4oiX-koRWW0AlufqrC61jM7xE'; // Supabase anon/public key'inizi buraya yazın
         let supabaseClient = null;
         // Supabase script yüklendikten sonra client oluştur
         if (typeof window.supabase !== 'undefined' && SUPABASE_URL && SUPABASE_ANON_KEY) {
