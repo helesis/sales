@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8" />
+    <title>RN Dağılım Heatmap 2026</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: #ffffff;
+            color: #1e293b;
+        }
+
+        .page {
+            min-height: 0;
+            padding: 16px 24px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            gap: 16px;
+        }
+
+        .title-block h1 {
+            margin: 0;
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        .title-block p {
+            margin: 4px 0 0;
+            font-size: 0.9rem;
+            color: #64748b;
+        }
+
+        .legend {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            font-size: 0.8rem;
+            color: #64748b;
+            align-items: flex-end;
+        }
+
+        .legend-scale {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .legend-bar {
+            display: flex;
+            width: 120px;
+            height: 10px;
+            border-radius: 999px;
+            overflow: hidden;
+            border: 1px solid rgba(148, 163, 184, 0.5);
+        }
+
+        .legend-bar span {
+            flex: 1;
+        }
+
+        .legend-bar .low {
+            background: #eff6ff;
+        }
+
+        .legend-bar .mid {
+            background: #60a5fa;
+        }
+
+        .legend-bar .high {
+            background: #1d4ed8;
+        }
+
+        .heatmap-container {
+            margin-top: 24px;
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 16px 16px 20px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            border: 1px solid #e2e8f0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .heatmap-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            font-size: 0.85rem;
+            color: #64748b;
+        }
+
+        .heatmap-scroll {
+            overflow: auto;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            background: #f8fafc;
+            max-height: 640px;
+        }
+
+        table.heatmap {
+            border-collapse: separate;
+            border-spacing: 0;
+            min-width: 800px;
+        }
+
+        .heatmap thead th {
+            background: #f1f5f9;
+        }
+
+        .heatmap thead {
+            position: sticky;
+            top: 0;
+            z-index: 4;
+        }
+
+        .heatmap th,
+        .heatmap td {
+            border-bottom: 1px solid #e2e8f0;
+            border-right: 1px solid #e2e8f0;
+            padding: 6px 8px;
+            font-size: 0.78rem;
+            white-space: nowrap;
+        }
+
+        .heatmap tbody td {
+            height: 72px;
+            min-height: 72px;
+            vertical-align: middle;
+            box-sizing: border-box;
+        }
+
+        .heatmap th:last-child,
+        .heatmap td:last-child {
+            border-right: none;
+        }
+
+        .heatmap th {
+            font-weight: 600;
+            color: #0f172a;
+        }
+
+        .sticky-col-1,
+        .sticky-col-2 {
+            position: sticky;
+            z-index: 3;
+            background: #f8fafc;
+        }
+
+        .sticky-col-1 {
+            left: 0;
+            z-index: 5;
+            width: 150px;
+            min-width: 150px;
+            max-width: 150px;
+        }
+
+        .sticky-col-2 {
+            left: 150px;
+            z-index: 4;
+            width: 200px;
+            min-width: 200px;
+            max-width: 200px;
+        }
+
+        .heatmap tbody tr:nth-child(even) td:not(.sticky-col-1):not(.sticky-col-2) {
+            background: #f8fafc;
+        }
+
+        .heatmap tbody tr:nth-child(odd) td:not(.sticky-col-1):not(.sticky-col-2) {
+            background: #ffffff;
+        }
+
+        .row-market-label {
+            font-weight: 600;
+            color: #0f172a;
+        }
+
+        .row-month-separator td {
+            border-top: 2px solid #cbd5e1;
+        }
+
+        /* GENEL TOPLAM: heat map yok, beyaz arka plan, koyu metin */
+        .row-month-total td {
+            background: #ffffff !important;
+            color: #1e293b;
+            border-top: 3px solid #f97316;
+            border-bottom: 3px solid #f97316;
+            font-weight: 600;
+        }
+
+        .row-month-total .sticky-col-1,
+        .row-month-total .sticky-col-2 {
+            background: #ffffff !important;
+            color: #0f172a;
+        }
+
+        .row-month-total .hm-rn { color: #0f172a; }
+        .row-month-total .hm-price { color: #475569; }
+        .row-month-total .hm-occupancy { color: #475569; }
+        .row-month-total .hm-empty { color: #64748b; }
+
+        .row-year-total td {
+            font-weight: 700;
+            text-align: center;
+            font-size: 0.9rem;
+        }
+
+        .hm-cell {
+            min-width: 90px;
+            text-align: center;
+            cursor: default;
+            position: relative;
+        }
+
+        .hm-cell-inner {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .hm-rn {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        .hm-price {
+            font-size: 0.7rem;
+            color: #475569;
+        }
+
+        .hm-progress {
+            position: relative;
+            width: 100%;
+            height: 6px;
+            border-radius: 999px;
+            background: #e2e8f0;
+            overflow: hidden;
+            border: 1px solid #cbd5e1;
+        }
+
+        .hm-progress-bar {
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #f97316, #22c55e);
+            transition: width 0.25s ease-out;
+        }
+
+        .hm-occupancy {
+            font-size: 0.68rem;
+            color: #475569;
+        }
+
+        .hm-empty {
+            font-size: 0.7rem;
+            color: #94a3b8;
+        }
+
+        .hm-tooltip {
+            position: fixed;
+            pointer-events: none;
+            z-index: 50;
+            background: #ffffff;
+            color: #1e293b;
+            padding: 10px 12px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            border: 1px solid #e2e8f0;
+            min-width: 220px;
+            max-width: 320px;
+            display: none;
+        }
+
+        .hm-tooltip h3 {
+            margin: 0 0 4px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #0f172a;
+        }
+
+        .hm-tooltip .row {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 2px;
+        }
+
+        .hm-tooltip .label {
+            color: #64748b;
+        }
+
+        .hm-tooltip .value {
+            color: #1e293b;
+            font-weight: 500;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 8px;
+            border-radius: 999px;
+            font-size: 0.7rem;
+            background: #f1f5f9;
+            color: #475569;
+        }
+
+        .badge-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 999px;
+            background: #22c55e;
+        }
+
+        .subtitle {
+            font-size: 0.78rem;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body>
+<div class="page">
+    <div class="header">
+        <div class="title-block">
+            <h1>RN Dağılım Heatmap · 2026 Mart–Kasım</h1>
+            <p>
+                Pazar × Oda Tipi kırılımında aylık Room Nights, ADB ve doluluk oranı.
+                Her hücre: RN · Ortalama Fiyat · Doluluk Progress Bar.
+            </p>
+        </div>
+        <div class="legend">
+            <div class="badge">
+                <span class="badge-dot"></span>
+                <span>Doluluk &amp; RN yoğunluğu</span>
+            </div>
+            <div class="legend-scale">
+                <span>Düşük RN</span>
+                <div class="legend-bar">
+                    <span class="low"></span><span class="mid"></span><span class="high"></span>
+                </div>
+                <span>Yüksek RN</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="heatmap-container">
+        <div class="heatmap-header">
+            <div class="subtitle">
+                508 yatak kapasiteli tesis varsayımıyla: Doluluk = RN / (Kapasite × Ay Gün Sayısı)
+            </div>
+            <div class="subtitle">
+                Turuncu satırlar: ay bazlı <strong>GENEL TOPLAM</strong> · Kırmızı satır: 9 aylık <strong>YILLIK TOPLAM</strong>
+            </div>
+        </div>
+        <div class="heatmap-scroll">
+            <table class="heatmap" id="heatmapTable">
+                <thead id="heatmapHead"></thead>
+                <tbody id="heatmapBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="hm-tooltip" id="hmTooltip"></div>
+</div>
+
+<script>
+    // === Konfigürasyon ve Örnek Veri ===
+    const ROOM_TYPES = [
+        { id: 'BUNGALOV', label: 'BUNGALOV (236 oda)', capacity: 236 },
+        { id: 'STANDART_LAND_VIEW', label: 'STANDART LAND VIEW (57 oda)', capacity: 57 },
+        { id: 'STANDART_SEA_VIEW', label: 'STANDART SEA VIEW (70 oda)', capacity: 70 },
+        { id: 'BUNGALOV_AILE_ODASI', label: 'BUNGALOV AİLE ODASI (133 oda)', capacity: 133 },
+        { id: 'STANDART_FAMILY_ROOM', label: 'STANDART FAMILY ROOM (8 oda)', capacity: 8 },
+        { id: 'SUITE', label: 'SUITE (4 oda)', capacity: 4 },
+        { id: 'TUM_ODALAR', label: 'TOPLAM (508 oda)', capacity: 508 }
+    ];
+
+    // API room_type zaten BUNGALOV, STANDART_LAND_VIEW, ... TUM_ODALAR dönüyor; mapping sadece fallback
+    const ROOM_TYPE_MAP = {
+        'VILLA': 'BUNGALOV', 'OTEL': 'STANDART_LAND_VIEW', 'ODNZ': 'STANDART_SEA_VIEW',
+        'FAM': 'BUNGALOV_AILE_ODASI', 'OFAM': 'STANDART_FAMILY_ROOM', 'SUIT': 'SUITE',
+        'TUM_ODALAR': 'TUM_ODALAR'
+    };
+
+    // Pazar sırası (sabit, gelen veride yoksa atlanır)
+    const ALL_MARKETS = [
+        'Baltic',
+        'CIS',
+        'East Europe',
+        'Great Britain',
+        'Local',
+        'Russia',
+        'Scandinavian',
+        'West Europe'
+    ];
+
+    // API'den doldurulacak state
+    let MONTHS = [];
+    let MARKETS = [];
+    let heatmapData = {}; // heatmapData[month][market][roomTypeId] = { rn, price } | null
+    let apiYearTotalRn = null; // Sorgudaki en alt satır, son sütun (TOPLAM 508 oda) RN değeri
+
+    const YEAR_TOTAL_KEY = 'YILLIK TOPLAM';
+
+    // === Yardımcı Fonksiyonlar ===
+
+    function getMonthLabel(ym) {
+        const [y, m] = ym.split('-');
+        const d = new Date(parseInt(y, 10), parseInt(m, 10) - 1, 1);
+        return d.toLocaleDateString('tr-TR', { month: 'short' });
+    }
+
+    function getDaysInMonth(ym) {
+        const [y, m] = ym.split('-');
+        return new Date(parseInt(y, 10), parseInt(m, 10), 0).getDate();
+    }
+
+    function computeYearTotals(data) {
+        const totals = {};
+
+        MARKETS.forEach(mkt => {
+            if (!totals[mkt]) totals[mkt] = {};
+            ROOM_TYPES.forEach(rt => {
+                totals[mkt][rt.id] = { rn: 0, priceSum: 0, rnSumForPrice: 0 };
+            });
+        });
+
+        MONTHS.forEach(month => {
+            const monthData = data[month] || {};
+            MARKETS.forEach(mkt => {
+                const mRow = monthData[mkt] || {};
+                ROOM_TYPES.forEach(rt => {
+                    const cell = mRow[rt.id];
+                    if (cell && typeof cell.rn === 'number') {
+                        const agg = totals[mkt][rt.id];
+                        agg.rn += cell.rn;
+                        if (typeof cell.price === 'number' && cell.price > 0) {
+                            agg.priceSum += cell.price * cell.rn;
+                            agg.rnSumForPrice += cell.rn;
+                        }
+                    }
+                });
+            });
+        });
+
+        const yearTotalRow = {};
+        MARKETS.forEach(mkt => {
+            ROOM_TYPES.forEach(rt => {
+                const agg = totals[mkt][rt.id];
+                if (!agg || agg.rn === 0) {
+                    yearTotalRow[mkt] = yearTotalRow[mkt] || {};
+                    yearTotalRow[mkt][rt.id] = null;
+                } else {
+                    const avgPrice = agg.rnSumForPrice ? agg.priceSum / agg.rnSumForPrice : 0;
+                    yearTotalRow[mkt] = yearTotalRow[mkt] || {};
+                    yearTotalRow[mkt][rt.id] = {
+                        rn: agg.rn,
+                        price: Math.round(avgPrice)
+                    };
+                }
+            });
+        });
+
+        return yearTotalRow;
+    }
+
+    function buildMaxRnByMarketAndMonth(data) {
+        const maxMap = {}; // maxMap[month][market] = max RN (oda bazında)
+        MONTHS.forEach(month => {
+            const monthData = data[month] || {};
+            maxMap[month] = {};
+            MARKETS.forEach(mkt => {
+                const mRow = monthData[mkt] || {};
+                let max = 0;
+                ROOM_TYPES.forEach(rt => {
+                    // Isı skalasını hesaplarken, pazar altındaki genel toplam satırı
+                    // (TOPLAM 508 oda / TUM_ODALAR) maksimum hesabına dahil edilmez.
+                    if (rt.id === 'TUM_ODALAR') return;
+
+                    const cell = mRow[rt.id];
+                    if (cell && typeof cell.rn === 'number') {
+                        if (cell.rn > max) max = cell.rn;
+                    }
+                });
+                maxMap[month][mkt] = max;
+            });
+        });
+        return maxMap;
+    }
+
+    function getHeatColor(rn, month, market, maxMap) {
+        if (!rn || rn <= 0) return 'transparent';
+        const maxRn = (maxMap[month] && maxMap[month][market]) || 0;
+        if (!maxRn) return '#020617';
+        let ratio = rn / maxRn;
+        if (ratio < 0) ratio = 0;
+        if (ratio > 1) ratio = 1;
+        const light = { r: 219, g: 234, b: 254 }; // #DBEAFE
+        const dark = { r: 59, g: 130, b: 246 };   // #3B82F6 (daha açık; metin okunaklı)
+        const r = Math.round(light.r + (dark.r - light.r) * ratio);
+        const g = Math.round(light.g + (dark.g - light.g) * ratio);
+        const b = Math.round(light.b + (dark.b - light.b) * ratio);
+        return `rgb(${r}, ${g}, ${b})`;
+    }
+
+    function formatCurrency(v) {
+        if (v == null || isNaN(v)) return '-';
+        return '€' + Number(v).toLocaleString('tr-TR', { maximumFractionDigits: 0 });
+    }
+
+    function formatNumber(v) {
+        if (v == null || isNaN(v)) return '-';
+        return Number(v).toLocaleString('tr-TR');
+    }
+
+    function formatPercent(v) {
+        if (v == null || isNaN(v)) return '-';
+        return '%' + Math.round(v);
+    }
+
+    // === Render ===
+
+    function buildHead() {
+        const head = document.getElementById('heatmapHead');
+        head.innerHTML = '';
+        const tr = document.createElement('tr');
+
+        const thMarket = document.createElement('th');
+        thMarket.textContent = 'Pazar / Toplam';
+        thMarket.className = 'sticky-col-1';
+        tr.appendChild(thMarket);
+
+        const thRoom = document.createElement('th');
+        thRoom.textContent = 'Oda Tipi (Kapasite)';
+        thRoom.className = 'sticky-col-2';
+        tr.appendChild(thRoom);
+
+        MONTHS.forEach(m => {
+            const th = document.createElement('th');
+            th.textContent = getMonthLabel(m);
+            th.style.textAlign = 'center';
+            tr.appendChild(th);
+        });
+
+        head.appendChild(tr);
+    }
+
+    function renderHeatmap(data) {
+        const body = document.getElementById('heatmapBody');
+        body.innerHTML = '';
+
+        const yearTotal = computeYearTotals(data);
+        const maxMap = buildMaxRnByMarketAndMonth(data);
+
+        MARKETS.forEach((market, mIndex) => {
+            ROOM_TYPES.forEach((rt, rtIndex) => {
+                const tr = document.createElement('tr');
+                if (rtIndex === 0 && market !== MARKETS[0]) {
+                    tr.classList.add('row-month-separator');
+                }
+
+                // GENEL TOPLAM pazar satırı veya her pazarın altındaki TOPLAM (508 oda) satırı
+                if (market === 'GENEL TOPLAM' || rt.id === 'TUM_ODALAR') {
+                    tr.classList.add('row-month-total');
+                }
+
+                // Pazar
+                const tdMarket = document.createElement('td');
+                tdMarket.className = 'sticky-col-1 row-market-label';
+                tdMarket.textContent = market;
+                tr.appendChild(tdMarket);
+
+                // Oda tipi
+                const tdRoom = document.createElement('td');
+                tdRoom.className = 'sticky-col-2';
+                tdRoom.textContent = rt.label;
+                tr.appendChild(tdRoom);
+
+                // Her ay için hücre
+                MONTHS.forEach(month => {
+                    const td = document.createElement('td');
+                    td.className = 'hm-cell';
+                    const monthData = data[month] || {};
+                    const row = monthData[market] || {};
+                    const cell = row[rt.id] || null;
+
+                    if (!cell || cell.rn == null || isNaN(cell.rn) || cell.rn <= 0) {
+                        td.innerHTML = '<span class="hm-empty">-</span>';
+                    } else {
+                        const rn = Number(cell.rn);
+                        const price = Number(cell.price || 0);
+                        const days = getDaysInMonth(month);
+                        const capacity = rt.capacity || 0;
+                        const maxRn = capacity * days;
+                        const occ = maxRn ? (rn / maxRn) * 100 : 0;
+
+                        const inner = document.createElement('div');
+                        inner.className = 'hm-cell-inner';
+
+                        const rnEl = document.createElement('div');
+                        rnEl.className = 'hm-rn';
+                        rnEl.textContent = formatNumber(rn);
+                        inner.appendChild(rnEl);
+
+                        const priceEl = document.createElement('div');
+                        priceEl.className = 'hm-price';
+                        priceEl.textContent = formatCurrency(price);
+                        inner.appendChild(priceEl);
+
+                        const pb = document.createElement('div');
+                        pb.className = 'hm-progress';
+                        const bar = document.createElement('div');
+                        bar.className = 'hm-progress-bar';
+                        bar.style.width = Math.min(100, Math.round(occ)) + '%';
+                        pb.appendChild(bar);
+                        inner.appendChild(pb);
+
+                        const occEl = document.createElement('div');
+                        occEl.className = 'hm-occupancy';
+                        occEl.textContent = formatPercent(occ);
+                        inner.appendChild(occEl);
+
+                        td.appendChild(inner);
+
+                        // Heat map sadece normal hücrelerde; toplam satırlarında yok
+                        if (market !== 'GENEL TOPLAM' && rt.id !== 'TUM_ODALAR') {
+                            td.style.background = getHeatColor(rn, month, market, maxMap);
+                        }
+
+                        td.dataset.month = month;
+                        td.dataset.market = market;
+                        td.dataset.roomType = rt.label;
+                        td.dataset.capacity = capacity;
+                        td.dataset.rn = rn;
+                        td.dataset.price = price;
+                        td.dataset.occ = occ.toFixed(1);
+                    }
+
+                    tr.appendChild(td);
+                });
+
+                body.appendChild(tr);
+            });
+        });
+
+        // YILLIK TOPLAM satırı
+        const yearRow = document.createElement('tr');
+        yearRow.className = 'row-year-total';
+        const tdYear = document.createElement('td');
+        tdYear.colSpan = 2 + MONTHS.length;
+
+        // Sorgudaki en alt satır son sütun (40.592) varsa onu kullan; yoksa hesaplanan toplam
+        let totalRn = 0;
+        if (apiYearTotalRn != null && !isNaN(apiYearTotalRn)) {
+            totalRn = apiYearTotalRn;
+        } else {
+            ROOM_TYPES.forEach(rt => {
+                MARKETS.forEach(mkt => {
+                    const c = yearTotal[mkt] && yearTotal[mkt][rt.id];
+                    if (c && typeof c.rn === 'number') totalRn += c.rn;
+                });
+            });
+        }
+
+        // Kullanıcının verdiği sabit: 233 gün × 508 oda = 118364 RN
+        const THEORETICAL_MAX_RN = 118364;
+        const yearOcc = THEORETICAL_MAX_RN ? (totalRn / THEORETICAL_MAX_RN) * 100 : 0;
+
+        tdYear.innerHTML = `
+            2026 Mart–Kasım YILLIK TOPLAM · 
+            Toplam Gerçek RN: <strong>${formatNumber(totalRn)}</strong> ·
+            Yıllık Teorik Maks RN: <strong>${formatNumber(THEORETICAL_MAX_RN)}</strong>
+            (508 oda × 233 gece) ·
+            Ortalama Doluluk: <strong>${formatPercent(yearOcc)}</strong>
+        `;
+        yearRow.appendChild(tdYear);
+        body.appendChild(yearRow);
+    }
+
+    // Tooltip
+    function setupTooltip() {
+        const tooltip = document.getElementById('hmTooltip');
+        const table = document.getElementById('heatmapTable');
+
+        table.addEventListener('mousemove', (e) => {
+            const cell = e.target.closest('.hm-cell');
+            if (!cell || !cell.dataset || !cell.dataset.rn) {
+                tooltip.style.display = 'none';
+                return;
+            }
+            const rect = cell.getBoundingClientRect();
+            const month = cell.dataset.month;
+            const market = cell.dataset.market;
+            const roomType = cell.dataset.roomType;
+            const rn = Number(cell.dataset.rn || 0);
+            const price = Number(cell.dataset.price || 0);
+            const cap = Number(cell.dataset.capacity || 0);
+            const occ = Number(cell.dataset.occ || 0);
+            const days = getDaysInMonth(month);
+            const rev = rn * price;
+
+            const [y, m] = month.split('-');
+            const monthLabel = new Date(parseInt(y, 10), parseInt(m, 10) - 1, 1)
+                .toLocaleDateString('tr-TR', { year: 'numeric', month: 'long' });
+
+            tooltip.innerHTML = `
+                <h3>${market} · ${roomType}</h3>
+                <div class="row">
+                    <span class="label">Ay</span>
+                    <span class="value">${monthLabel}</span>
+                </div>
+                <div class="row">
+                    <span class="label">RN</span>
+                    <span class="value">${formatNumber(rn)}</span>
+                </div>
+                <div class="row">
+                    <span class="label">Kapasite</span>
+                    <span class="value">${cap} oda × ${days} gün = ${formatNumber(cap * days)} RN</span>
+                </div>
+                <div class="row">
+                    <span class="label">Doluluk</span>
+                    <span class="value">${formatPercent(occ)}</span>
+                </div>
+                <div class="row">
+                    <span class="label">Ortalama Fiyat</span>
+                    <span class="value">${formatCurrency(price)}</span>
+                </div>
+                <div class="row">
+                    <span class="label">Tahmini Gelir</span>
+                    <span class="value">${formatCurrency(rev)}</span>
+                </div>
+            `;
+
+            const padding = 12;
+            let x = e.clientX + 16;
+            let yPos = e.clientY + 16;
+            const vw = window.innerWidth;
+            const vh = window.innerHeight;
+
+            tooltip.style.display = 'block';
+            const tw = tooltip.offsetWidth;
+            const th = tooltip.offsetHeight;
+
+            if (x + tw + padding > vw) {
+                x = e.clientX - tw - 16;
+            }
+            if (yPos + th + padding > vh) {
+                yPos = vh - th - padding;
+            }
+
+            tooltip.style.left = x + 'px';
+            tooltip.style.top = yPos + 'px';
+        });
+
+        table.addEventListener('mouseleave', () => {
+            tooltip.style.display = 'none';
+        });
+    }
+
+    // API'den veri çek ve heatmap'i oluştur
+    document.addEventListener('DOMContentLoaded', async () => {
+        try {
+            const resp = await fetch('http://localhost:3001/api/rn-heatmap');
+            const data = await resp.json();
+            const rows = Array.isArray(data) ? data : (data.rows || []);
+            apiYearTotalRn = (data && typeof data.yearTotalRn === 'number' && !isNaN(data.yearTotalRn)) ? data.yearTotalRn : null;
+
+            // Ay listesi
+            const monthSet = new Set();
+            const marketSet = new Set();
+            rows.forEach(r => {
+                if (r.MONTH_KEY || r.MONTH_KEY === 0) monthSet.add(r.MONTH_KEY || r.month_key);
+                if (r.MARKET || r.market) marketSet.add(r.MARKET || r.market);
+            });
+
+            MONTHS = Array.from(monthSet).sort();
+            if (MONTHS.length === 0) MONTHS = ['2026-03', '2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10', '2026-11'];
+
+            // Pazarlari sabit sıraya göre sırala, sadece gelenleri al
+            const normalMarkets = ALL_MARKETS.filter(m => marketSet.has(m));
+            MARKETS = normalMarkets.length ? [...normalMarkets, 'GENEL TOPLAM'] : ['GENEL TOPLAM'];
+
+            // Boş yapı hazırla
+            MONTHS.forEach(m => {
+                heatmapData[m] = {};
+                MARKETS.forEach(mkt => {
+                    heatmapData[m][mkt] = {};
+                    ROOM_TYPES.forEach(rt => {
+                        heatmapData[m][mkt][rt.id] = null;
+                    });
+                });
+            });
+
+            // Hücreleri doldur (API: month_key, market, room_type, rn, price)
+            rows.forEach(r => {
+                const month = r.MONTH_KEY || r.month_key;
+                const market = r.MARKET || r.market;
+                const rawType = (r.ROOM_TYPE || r.room_type || '').toString().trim();
+                const mappedId = ROOM_TYPES.some(rt => rt.id === rawType) ? rawType : (ROOM_TYPE_MAP[rawType.toUpperCase()] || null);
+                const rn = r.RN ?? r.rn;
+                const price = r.PRICE ?? r.price;
+                if (!month || !market || !mappedId) return;
+                if (!heatmapData[month]) return;
+                if (!heatmapData[month][market]) return;
+                const rt = ROOM_TYPES.find(rt => rt.id === mappedId);
+                if (!rt) return;
+                heatmapData[month][market][rt.id] = {
+                    rn: rn || 0,
+                    price: price || 0
+                };
+            });
+
+            // GENEL TOPLAM satırı: her ay ve oda tipi için tüm pazarların toplamı
+            MONTHS.forEach(month => {
+                const monthRow = heatmapData[month];
+                if (!monthRow) return;
+                const totalRow = monthRow['GENEL TOPLAM'];
+                ROOM_TYPES.forEach(rt => {
+                    let sumRn = 0;
+                    let priceSum = 0;
+                    let rnForPrice = 0;
+                    MARKETS.forEach(mkt => {
+                        if (mkt === 'GENEL TOPLAM') return;
+                        const cell = monthRow[mkt][rt.id];
+                        if (cell && typeof cell.rn === 'number') {
+                            sumRn += cell.rn;
+                            if (typeof cell.price === 'number' && cell.price > 0) {
+                                priceSum += cell.price * cell.rn;
+                                rnForPrice += cell.rn;
+                            }
+                        }
+                    });
+                    if (sumRn === 0) {
+                        totalRow[rt.id] = null;
+                    } else {
+                        const avgPrice = rnForPrice ? priceSum / rnForPrice : 0;
+                        totalRow[rt.id] = { rn: sumRn, price: avgPrice };
+                    }
+                });
+            });
+
+            buildHead();
+            renderHeatmap(heatmapData);
+            setupTooltip();
+        } catch (e) {
+            console.error('RN heatmap yüklenirken hata:', e);
+        }
+    });
+</script>
+</body>
+</html>
+

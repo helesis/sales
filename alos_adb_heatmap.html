@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8" />
+    <title>ALOS & ADB Heatmap</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #ffffff; color: #1e293b; }
+        .page { min-height: 0; padding: 16px 24px 24px; display: flex; flex-direction: column; gap: 12px; }
+        .header { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
+        .title-block h1 { margin: 0; font-size: 1.28rem; font-weight: 700; color: #0f172a; }
+        .title-block p { margin: 4px 0 0; font-size: 0.72rem; color: #64748b; }
+        .legend { display: flex; flex-direction: column; gap: 4px; font-size: 0.64rem; color: #64748b; align-items: flex-end; }
+        .legend-scale { display: flex; align-items: center; gap: 6px; }
+        .legend-bar { display: flex; width: 140px; height: 10px; border-radius: 999px; overflow: hidden; border: 1px solid rgba(148, 163, 184, 0.5); }
+        .legend-bar span { flex: 1; }
+        .legend-bar .low { background: #e3f2fd; }
+        .legend-bar .mid { background: #2196f3; }
+        .legend-bar .high { background: #0d47a1; }
+
+        .heatmap-container { margin-top: 24px; background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid #e2e8f0; overflow: hidden; display: flex; flex-direction: column; gap: 12px; }
+        .heatmap-scroll { width: 100%; border-radius: 8px; border: 1px solid #e2e8f0; background: #f8fafc; max-height: 512px; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; }
+        .heatmap-wrap { display: flex; flex: 1; min-width: 0; min-height: 0; }
+        .heatmap-col-pazar { flex: 0 0 120px; z-index: 2; background: #f8fafc; box-shadow: 2px 0 6px rgba(0,0,0,0.08); overflow: hidden; }
+        .heatmap-col-pazar table { width: 120px; table-layout: fixed; border-collapse: separate; border-spacing: 0; }
+        .heatmap-col-pazar .heatmap tbody td { height: 72px; min-height: 72px; vertical-align: middle; }
+        .heatmap-col-data { flex: 1; min-width: 0; overflow-x: auto; overflow-y: hidden; }
+        .heatmap-col-data table { border-collapse: separate; border-spacing: 0; min-width: 640px; }
+        .heatmap-col-data .heatmap tbody td { height: 72px; min-height: 72px; }
+        table.heatmap { border-collapse: separate; border-spacing: 0; }
+        .heatmap thead th { background: #1e293b; color: #fff; font-weight: 600; padding: 8px 6px; font-size: 0.64rem; border-right: 1px solid #334155; border-bottom: 1px solid #334155; height: 35px; box-sizing: border-box; }
+        .heatmap thead th:last-child { border-right: none; }
+        .heatmap th, .heatmap td { border-bottom: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; padding: 5px 6px; font-size: 0.624rem; white-space: nowrap; }
+        .heatmap th:last-child, .heatmap td:last-child { border-right: none; }
+        .heatmap tbody td { min-width: 112px; min-height: 72px; vertical-align: middle; box-sizing: border-box; cursor: default; transition: transform 0.15s ease, box-shadow 0.15s ease; }
+        .heatmap tbody td:hover { transform: scale(1.02); box-shadow: 0 4px 12px rgba(0,0,0,0.12); z-index: 1; }
+        .heatmap-col-pazar .heatmap thead th { background: #1e293b; }
+        .heatmap-col-pazar .heatmap tbody td { background: #f8fafc; font-weight: 600; color: #0f172a; }
+        .heatmap-col-pazar .heatmap tbody tr:nth-child(even) td { background: #f1f5f9; }
+        .alos-cell-null { background: #e2e8f0 !important; color: #94a3b8; }
+        .alos-cell-null .cell-content { color: #94a3b8; }
+
+        .cell-content { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 3px 0; }
+        .cell-divider { width: 80%; height: 1px; background: #cbd5e1; margin: 2px 0; }
+        .year-label { font-size: 8px; text-transform: uppercase; font-weight: 700; opacity: 0.7; }
+        .alos-value { font-weight: 800; font-size: 14.4px; line-height: 1.2; }
+        .alos-value-2025 { font-weight: 700; font-size: 12px; }
+        .adb-value { font-size: 9.6px; color: #555; font-weight: 600; }
+        .adb-value-2025 { font-size: 8.8px; color: #64748b; font-weight: 600; }
+
+        .hm-tooltip { position: fixed; pointer-events: none; z-index: 50; background: #fff; color: #1e293b; padding: 10px 12px; border-radius: 8px; font-size: 0.64rem; box-shadow: 0 4px 12px rgba(0,0,0,0.15); border: 1px solid #e2e8f0; min-width: 220px; max-width: 320px; display: none; }
+        .hm-tooltip h3 { margin: 0 0 6px; font-size: 0.72rem; font-weight: 600; color: #0f172a; }
+        .hm-tooltip .row { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 2px; }
+        .hm-tooltip .label { color: #64748b; }
+        .hm-tooltip .value { color: #1e293b; font-weight: 500; }
+        .hm-tooltip .change-up { color: #16a34a; }
+        .hm-tooltip .change-down { color: #dc2626; }
+    </style>
+</head>
+<body>
+<div class="page">
+    <div class="header">
+        <div class="title-block">
+            <h1>ALOS & ADB Heatmap Analysis</h1>
+            <p>Average Length of Stay (Heat) & Average Daily Budget | 2025 vs 2026</p>
+        </div>
+        <div class="legend">
+            <div class="legend-scale">
+                <span>ALOS (Gün): Düşük (3-5)</span>
+                <div class="legend-bar">
+                    <span class="low"></span><span class="mid"></span><span class="high"></span>
+                </div>
+                <span>Yüksek (9+)</span>
+            </div>
+        </div>
+    </div>
+    <div class="heatmap-container">
+        <div class="heatmap-scroll">
+            <div class="heatmap-wrap">
+                <div class="heatmap-col-pazar">
+                    <table class="heatmap" id="heatmapTablePazar">
+                        <thead id="heatmapHeadPazar"></thead>
+                        <tbody id="heatmapBodyPazar"></tbody>
+                    </table>
+                </div>
+                <div class="heatmap-col-data">
+                    <table class="heatmap" id="heatmapTableData">
+                        <thead id="heatmapHeadData"></thead>
+                        <tbody id="heatmapBodyData"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="hm-tooltip" id="hmTooltip"></div>
+</div>
+<script>
+(function() {
+    const MONTHS = [
+        { key: 'JAN', label: 'Oca' }, { key: 'FEB', label: 'Şub' }, { key: 'MAR', label: 'Mar' }, { key: 'APR', label: 'Nis' },
+        { key: 'MAY', label: 'May' }, { key: 'JUN', label: 'Haz' }, { key: 'JUL', label: 'Tem' }, { key: 'AUG', label: 'Ağu' },
+        { key: 'SEP', label: 'Eyl' }, { key: 'OCT', label: 'Eki' }, { key: 'NOV', label: 'Kas' }, { key: 'DEC', label: 'Ara' }
+    ];
+
+    function parseCell(value) {
+        if (value == null || value === '') return null;
+        const s = String(value).trim();
+        const parts = s.split(/\s*;\s*/);
+        if (parts.length < 2) return null;
+        const alos = parseFloat(parts[0].replace(',','.').trim());
+        const adb = parseFloat(parts[1].replace(',','.').trim());
+        if (isNaN(alos) || isNaN(adb)) return null;
+        return { alos, adb };
+    }
+
+    function getColorFromALOS(alos) {
+        if (alos == null || isNaN(alos)) return { r: 226, g: 232, b: 240 };
+        const n = Math.min(Math.max((alos - 3) / 9, 0), 1);
+        const light = { r: 227, g: 242, b: 253 };
+        const mid = { r: 33, g: 150, b: 243 };
+        const dark = { r: 13, g: 71, b: 161 };
+        let r, g, b;
+        if (n <= 0.5) {
+            const t = n * 2;
+            r = Math.round(light.r + (mid.r - light.r) * t);
+            g = Math.round(light.g + (mid.g - light.g) * t);
+            b = Math.round(light.b + (mid.b - light.b) * t);
+        } else {
+            const t = (n - 0.5) * 2;
+            r = Math.round(mid.r + (dark.r - mid.r) * t);
+            g = Math.round(mid.g + (dark.g - mid.g) * t);
+            b = Math.round(mid.b + (dark.b - mid.b) * t);
+        }
+        return { r, g, b };
+    }
+
+    function rgbToHex(r,g,b) {
+        return '#' + [r,g,b].map(x => Math.max(0,Math.min(255,Math.round(x))).toString(16).padStart(2,'0')).join('');
+    }
+
+    function luminance(r, g, b) {
+        const [rs, gs, bs] = [r,g,b].map(c => {
+            c /= 255;
+            return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+        });
+        return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+    }
+
+    function textColorForBg(r, g, b) {
+        return luminance(r, g, b) > 0.5 ? '#1e293b' : '#ffffff';
+    }
+
+    function formatADB(adb) {
+        if (adb == null || isNaN(adb)) return '–';
+        return '€' + (adb >= 1000 ? (adb/1000).toFixed(0) : Math.round(adb).toString());
+    }
+
+    function buildCellHtml(data2026, data2025, bgRgb) {
+        const isNull = !data2026 && !data2025;
+        const textColor = isNull ? '#94a3b8' : textColorForBg(bgRgb.r, bgRgb.g, bgRgb.b);
+        const bgHex = rgbToHex(bgRgb.r, bgRgb.g, bgRgb.b);
+        let html = '<div class="cell-content" style="color:' + textColor + '">';
+        if (data2026) {
+            html += '<span class="year-label">2026</span><span class="alos-value">' + data2026.alos + '</span><span class="adb-value">' + formatADB(data2026.adb) + '</span>';
+        } else {
+            html += '<span class="year-label">2026</span><span class="alos-value">–</span><span class="adb-value">–</span>';
+        }
+        html += '<div class="cell-divider"></div>';
+        if (data2025) {
+            html += '<span class="year-label">2025</span><span class="alos-value alos-value-2025">' + data2025.alos + '</span><span class="adb-value adb-value-2025">' + formatADB(data2025.adb) + '</span>';
+        } else {
+            html += '<span class="year-label">2025</span><span class="alos-value alos-value-2025">–</span><span class="adb-value adb-value-2025">–</span>';
+        }
+        html += '</div>';
+        return { html, bgHex, isNull };
+    }
+
+    function pctChange(v1, v2) {
+        if (v2 == null || v2 === 0 || isNaN(v1) || isNaN(v2)) return null;
+        return ((v1 - v2) / v2) * 100;
+    }
+
+    const tooltipEl = document.getElementById('hmTooltip');
+    function showTooltip(market, monthLabel, data2026, data2025, x, y) {
+        let html = '<h3>' + market + ' · ' + monthLabel + '</h3>';
+        if (data2026) {
+            html += '<div class="row"><span class="label">2026 ALOS</span><span class="value">' + data2026.alos + ' gün</span></div>';
+            html += '<div class="row"><span class="label">2026 ADB</span><span class="value">' + formatADB(data2026.adb) + '</span></div>';
+        }
+        if (data2025) {
+            html += '<div class="row"><span class="label">2025 ALOS</span><span class="value">' + data2025.alos + ' gün</span></div>';
+            html += '<div class="row"><span class="label">2025 ADB</span><span class="value">' + formatADB(data2025.adb) + '</span></div>';
+        }
+        if (data2026 && data2025) {
+            const alosCh = pctChange(data2026.alos, data2025.alos);
+            const adbCh = pctChange(data2026.adb, data2025.adb);
+            if (alosCh != null) {
+                const cls = alosCh >= 0 ? 'change-up' : 'change-down';
+                const arrow = alosCh >= 0 ? '▲' : '▼';
+                html += '<div class="row"><span class="label">ALOS Değişim</span><span class="' + cls + '">' + arrow + ' ' + (alosCh >= 0 ? '+' : '') + alosCh.toFixed(1) + '%</span></div>';
+            }
+            if (adbCh != null) {
+                const cls = adbCh >= 0 ? 'change-up' : 'change-down';
+                const arrow = adbCh >= 0 ? '▲' : '▼';
+                html += '<div class="row"><span class="label">ADB Değişim</span><span class="' + cls + '">' + arrow + ' ' + (adbCh >= 0 ? '+' : '') + adbCh.toFixed(1) + '%</span></div>';
+            }
+        }
+        tooltipEl.innerHTML = html;
+        tooltipEl.style.display = 'block';
+        tooltipEl.style.left = (x + 12) + 'px';
+        tooltipEl.style.top = (y + 12) + 'px';
+    }
+    function hideTooltip() {
+        tooltipEl.style.display = 'none';
+    }
+
+    function getRowKey(row) {
+        return (row.PAZAR || row.pazar || row.Pazar || '').trim();
+    }
+
+    function getCellRaw(row, month) {
+        const k26 = month.key + '_26';
+        const k25 = month.key + '_25';
+        const v26 = row[k26] ?? row[k26.toLowerCase()];
+        const v25 = row[k25] ?? row[k25.toLowerCase()];
+        return { data2026: parseCell(v26), data2025: parseCell(v25) };
+    }
+
+    async function loadHeatmap() {
+        var theadPazar = document.getElementById('heatmapHeadPazar');
+        var tbodyPazar = document.getElementById('heatmapBodyPazar');
+        var theadData = document.getElementById('heatmapHeadData');
+        var tbodyData = document.getElementById('heatmapBodyData');
+        var rows = [];
+        try {
+            var url = (window.location.origin && window.location.port === '3001')
+                ? (window.location.origin + '/api/alos-adb-heatmap')
+                : 'http://localhost:3001/api/alos-adb-heatmap';
+            var res = await fetch(url);
+            if (!res.ok) throw new Error(res.statusText);
+            rows = await res.json();
+        } catch (e) {
+            tbodyPazar.innerHTML = '<tr><td style="text-align:center;padding:20px;color:#64748b;">Veri yüklenemedi: ' + e.message + '</td></tr>';
+            tbodyData.innerHTML = '';
+            return;
+        }
+
+        var trPazar = document.createElement('tr');
+        trPazar.innerHTML = '<th>Pazar</th>';
+        theadPazar.appendChild(trPazar);
+
+        var trData = document.createElement('tr');
+        MONTHS.forEach(function(m) {
+            var th = document.createElement('th');
+            th.textContent = m.label;
+            trData.appendChild(th);
+        });
+        theadData.appendChild(trData);
+
+        rows.forEach(function(row) {
+            var market = getRowKey(row);
+            var trP = document.createElement('tr');
+            var tdP = document.createElement('td');
+            tdP.textContent = market;
+            trP.appendChild(tdP);
+            tbodyPazar.appendChild(trP);
+
+            var trD = document.createElement('tr');
+            MONTHS.forEach(function(month) {
+                var raw = getCellRaw(row, month);
+                var data2026 = raw.data2026;
+                var data2025 = raw.data2025;
+                var alosForColor = (data2026 && data2026.alos != null) ? data2026.alos : (data2025 && data2025.alos != null ? data2025.alos : null);
+                var bgRgb = getColorFromALOS(alosForColor);
+                var cell = buildCellHtml(data2026, data2025, bgRgb);
+
+                var td = document.createElement('td');
+                td.style.backgroundColor = cell.bgHex;
+                if (cell.isNull) td.classList.add('alos-cell-null');
+                td.innerHTML = cell.html;
+                td.dataset.market = market;
+                td.dataset.month = month.label;
+                td.dataset.data2026 = data2026 ? JSON.stringify(data2026) : '';
+                td.dataset.data2025 = data2025 ? JSON.stringify(data2025) : '';
+
+                td.addEventListener('mouseenter', function(ev) {
+                    var d26 = td.dataset.data2026 ? JSON.parse(td.dataset.data2026) : null;
+                    var d25 = td.dataset.data2025 ? JSON.parse(td.dataset.data2025) : null;
+                    showTooltip(market, td.dataset.month, d26, d25, ev.clientX, ev.clientY);
+                });
+                td.addEventListener('mousemove', function(ev) {
+                    tooltipEl.style.left = (ev.clientX + 12) + 'px';
+                    tooltipEl.style.top = (ev.clientY + 12) + 'px';
+                });
+                td.addEventListener('mouseleave', hideTooltip);
+
+                trD.appendChild(td);
+            });
+            tbodyData.appendChild(trD);
+        });
+    }
+
+    loadHeatmap();
+})();
+</script>
+</body>
+</html>
