@@ -807,7 +807,7 @@
                     supabaseClient.from('today_rn_by_month_market').select('*').order('synced_at', { ascending: false }),
                     supabaseClient.from('agent_performance').select('*').order('synced_at', { ascending: false }),
                     supabaseClient.from('today_agent_rn').select('*').order('synced_at', { ascending: false }),
-                    supabaseClient.from('daily_market_rn').select('*').order('synced_at', { ascending: false }),
+                    supabaseClient.from('daily_market_rn').select('*').order('synced_at', { ascending: false }).limit(6000),
                     supabaseClient.from('booking_pace').select('*').order('synced_at', { ascending: false }).limit(12),
                     supabaseClient.from('annual_target').select('*').order('synced_at', { ascending: false }).limit(1).single(),
                     supabaseClient.from('market_mainmarket').select('*').order('synced_at', { ascending: false })
