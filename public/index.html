@@ -1,0 +1,2337 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Booking Dashboard 2026</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://unpkg.com/bcryptjs@2.4.3/dist/bcrypt.min.js" crossorigin="anonymous"></script>
+    <script>
+      if (typeof window.bcrypt === 'undefined' && typeof window.bcryptjs !== 'undefined') window.bcrypt = window.bcryptjs;
+      if (typeof window.bcrypt === 'undefined' && typeof window.dcodeIO !== 'undefined' && window.dcodeIO && window.dcodeIO.bcrypt) window.bcrypt = window.dcodeIO.bcrypt;
+    </script>
+    <script src="vendor/chart.umd.min.js"></script>
+    <script src="vendor/chartjs-plugin-datalabels.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .header .last-update {
+            font-size: 0.85em;
+            opacity: 0.75;
+            margin-top: 6px;
+            font-weight: normal;
+        }
+
+        .loading {
+            text-align: center;
+            color: white;
+            font-size: 1.5em;
+            padding: 50px;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .metric-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+        }
+
+        .metric-card .label {
+            font-size: 0.9em;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+
+        .metric-card .value {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .metric-card .subtext {
+            font-size: 0.85em;
+            color: #999;
+        }
+
+        /* Yıllık Gelir Hedefi kartı */
+        .gauge-card .value {
+            font-size: 1.8em;
+        }
+
+        .gauge-badge {
+            margin-top: 10px;
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 999px;
+            font-size: 0.9em;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .gauge-stats {
+            margin-top: 10px;
+            background: #f1f5f9;
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 0.85em;
+            color: #334155;
+        }
+
+        .gauge-stats div {
+            margin: 2px 0;
+        }
+
+        /* Basit radial progress (CSS-only) */
+        .radial-progress {
+            --size: 90px;
+            --thickness: 10px;
+            --value: 0;    /* 0–1 arası oran */
+            --fg: #16a34a;
+            --bg: #e5e7eb;
+
+            width: var(--size);
+            height: var(--size);
+            margin: 10px auto;
+            border-radius: 50%;
+            background:
+                conic-gradient(var(--fg) calc(var(--value) * 100%), var(--bg) 0);
+            -webkit-mask:
+                radial-gradient(farthest-side, transparent calc(100% - var(--thickness)), #000 0);
+            mask:
+                radial-gradient(farthest-side, transparent calc(100% - var(--thickness)), #000 0);
+            position: relative;
+        }
+
+        .radial-progress::after {
+            content: attr(data-label);
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8em;
+            font-weight: 600;
+            color: #0f172a;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+
+        .chart-container {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .chart-container h2 {
+            color: #333;
+            margin-bottom: 14px;
+            font-size: 1.15em;
+            border-left: 4px solid #667eea;
+            padding-left: 12px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .chart-container h2:hover {
+            color: #667eea;
+        }
+
+        .chart-data-legend {
+            display: none;
+            margin-top: 12px;
+            padding: 12px;
+            background: #f8fafc;
+            border-radius: 8px;
+            font-size: 0.8em;
+            overflow-x: auto;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .chart-data-legend.visible {
+            display: block;
+        }
+
+        .chart-data-legend table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .chart-data-legend th,
+        .chart-data-legend td {
+            padding: 4px 8px;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .chart-data-legend th {
+            font-weight: 600;
+            color: #475569;
+        }
+
+        .charts-grid .chart-container canvas {
+            max-height: 520px;
+        }
+        .chart-container-agent-perf canvas {
+            max-height: 640px;
+        }
+        .agent-perf-sort-legend {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+        .agent-sort-opt {
+            font-size: 0.85rem;
+            padding: 4px 10px;
+            border-radius: 6px;
+            background: #f1f5f9;
+            color: #475569;
+            cursor: pointer;
+            user-select: none;
+        }
+        .agent-sort-opt:hover {
+            background: #e2e8f0;
+            color: #334155;
+        }
+        .agent-sort-opt.active {
+            background: #667eea;
+            color: #fff;
+        }
+
+        .chart-container-full {
+            grid-column: 1 / -1;
+            margin-bottom: 24px;
+        }
+        .chart-container-full:last-of-type {
+            margin-bottom: 0;
+        }
+
+        .chart-container-full canvas {
+            max-height: 640px;
+        }
+
+        .icon {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .error {
+            background: #ff6b6b;
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.8em;
+            }
+            
+            .metric-card .value {
+                font-size: 2em;
+            }
+
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Login ekranı */
+        #loginScreen {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .login-card {
+            background: rgba(255,255,255,0.98);
+            border-radius: 20px;
+            padding: 48px 40px;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.25);
+            width: 100%;
+            max-width: 400px;
+        }
+        .login-card h1 {
+            color: #667eea;
+            font-size: 1.75rem;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+        .login-card .subtitle {
+            color: #666;
+            text-align: center;
+            margin-bottom: 32px;
+            font-size: 0.95rem;
+        }
+        .login-card label {
+            display: block;
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+        }
+        .login-card input {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 1rem;
+            margin-bottom: 20px;
+            box-sizing: border-box;
+        }
+        .login-card input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .login-card button[type="submit"] {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.05rem;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 8px;
+        }
+        .login-card button[type="submit"]:hover {
+            opacity: 0.95;
+            transform: translateY(-1px);
+        }
+        .login-error {
+            background: #fef2f2;
+            color: #b91c1c;
+            padding: 12px;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            margin-bottom: 20px;
+            display: none;
+        }
+        #appScreen { display: none; }
+        .header-user {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+        }
+        .header-user .display-name {
+            font-weight: 600;
+            color: rgba(255,255,255,0.95);
+        }
+        .btn-logout {
+            padding: 8px 16px;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.5);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        .btn-logout:hover {
+            background: rgba(255,255,255,0.3);
+        }
+    </style>
+</head>
+<body>
+    <!-- Giriş ekranı (ilk açılış) -->
+    <div id="loginScreen">
+        <div class="login-card">
+            <h1>🏨 Booking Dashboard</h1>
+            <p class="subtitle">Booking Dashboard 2026</p>
+            <div id="loginError" class="login-error"></div>
+            <form id="loginForm">
+                <label for="loginUsername">Kullanıcı adı</label>
+                <input type="text" id="loginUsername" name="username" autocomplete="username" required placeholder="Kullanıcı adınız">
+                <label for="loginPassword">Parola</label>
+                <input type="password" id="loginPassword" name="password" autocomplete="current-password" required placeholder="Parolanız">
+                <button type="submit">Giriş yap</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Uygulama (giriş yapıldıktan sonra) -->
+    <div id="appScreen" class="container">
+        <div class="header">
+            <h1>🏨 Booking Dashboard</h1>
+            <p>Booking Dashboard 2026 - <span id="currentDate"></span></p>
+            <div class="header-user">
+                <span class="display-name" id="displayName">—</span>
+                <button type="button" class="btn-logout" id="btnLogout">Çıkış</button>
+            </div>
+            <p class="last-update">Son güncelleme: <span id="lastUpdateTime">—</span></p>
+        </div>
+
+        <div id="loadingIndicator" class="loading">
+            📊 Veriler yükleniyor...
+        </div>
+
+        <div id="errorContainer" style="display: none;"></div>
+
+        <div id="dashboardContent" style="display: none;">
+            <!-- Bugünün Metrikleri -->
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="icon">📋</div>
+                    <div class="label">Bugün Oluşturulan Rezervasyon</div>
+                    <div class="value" id="todayReservations">-</div>
+                    <div class="subtext">Adet</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="icon">🛏️</div>
+                    <div class="label">Bugün Oluşturulan Room Nights</div>
+                    <div class="value" id="todayRN">-</div>
+                    <div class="subtext">Oda Gecesi</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="icon">💰</div>
+                    <div class="label">Bugün Oluşturulan Gelir</div>
+                    <div class="value" id="todayRevenue">-</div>
+                    <div class="subtext">EUR</div>
+                </div>
+
+                <div class="metric-card gauge-card">
+                    <div class="icon">🎯</div>
+                    <div class="label">Yıllık Gelir Hedefi</div>
+                    <div class="value" id="annualTargetValue">-</div>
+                    <div class="subtext">Tamamlandı</div>
+                    <div class="radial-progress" id="annualRadial"></div>
+                    <div id="annualTargetBadge" class="gauge-badge">-</div>
+                    <div class="gauge-stats">
+                        <div id="annualStatsActual">💰 Gerçekleşen: -</div>
+                        <div id="annualStatsTarget">🎯 Hedef: €50.000.000</div>
+                        <div id="annualStatsRemaining">📈 Kalan: -</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Grafikler: satırda 2'şer; sıra: 1–9 grid, 10–11 tam genişlik -->
+            <div class="charts-grid">
+                <div class="chart-container">
+                    <h2>🛏️ Bugün Girilen Rezervasyonlar – 2026 Aylarına Göre Room Nights</h2>
+                    <canvas id="todayRnByMonthChart"></canvas>
+                    <div class="chart-data-legend"></div>
+                </div>
+                <div class="chart-container">
+                    <h2>📋 Bugün Girilen – Acente Bazlı RN & Gelir</h2>
+                    <canvas id="todayAgentChart"></canvas>
+                    <div class="chart-data-legend"></div>
+                </div>
+                <div class="chart-container">
+                    <h2>📈 2026 Booking Pace - Son 15 & 30 Gün</h2>
+                    <canvas id="bookingPaceChart"></canvas>
+                    <div class="chart-data-legend"></div>
+                </div>
+                <div class="chart-container">
+                    <h2>🧩 Pazar Payı Dağılımı (RN) – Yıl Seçin</h2>
+                    <canvas id="marketShareChart"></canvas>
+                    <div class="chart-data-legend"></div>
+                </div>
+                <div class="chart-container">
+                    <h2>📊 2026 Aylık Room Nights (OTB)</h2>
+                    <canvas id="rnChart"></canvas>
+                    <div class="chart-data-legend"></div>
+                </div>
+                <div class="chart-container">
+                    <h2>💹 Ana Pazar Gelir Dağılımı (2025 / 2026)</h2>
+                    <canvas id="revenueMainmarketChart"></canvas>
+                    <div class="chart-data-legend"></div>
+                </div>
+                <div class="chart-container">
+                    <h2>💵 2026 Aylık Toplam Gelir (OTB)</h2>
+                    <canvas id="revenueChart"></canvas>
+                    <div class="chart-data-legend"></div>
+                </div>
+                <div class="chart-container">
+                    <h2>📈 2026 Aylık Average Rate (OTB)</h2>
+                    <canvas id="avgRateChart"></canvas>
+                    <div class="chart-data-legend"></div>
+                </div>
+                <div class="chart-container chart-container-agent-perf chart-container-full" id="agentPerformanceContainer">
+                    <h2>📊 Acente Performansı</h2>
+                    <div class="agent-perf-sort-legend">
+                        <span class="agent-sort-opt active" data-sort="2026" title="Acenteleri 2026 gelirine göre sırala">2026'ye göre sırala</span>
+                        <span class="agent-sort-opt" data-sort="2025" title="Acenteleri 2025 gelirine göre sırala">2025'e göre sırala</span>
+                    </div>
+                    <canvas id="agentPerformanceChart"></canvas>
+                    <div class="chart-data-legend"></div>
+                </div>
+            </div>
+            <div class="chart-container chart-container-full">
+                <h2>📅 2026 Günlük Doluluk - Pazar Bazlı (OTB)</h2>
+                <canvas id="dailyMarketChart"></canvas>
+                <div class="chart-data-legend"></div>
+            </div>
+            <div class="chart-container chart-container-full">
+                <h2>🔥 2026 RN Dağılım Heatmap (Mart–Kasım)</h2>
+                <iframe src="rn_heatmap.html"
+                        style="width: 100%; height: 820px; border: none; border-radius: 16px; overflow: hidden; background: transparent;">
+                </iframe>
+            </div>
+            <div class="chart-container chart-container-full">
+                <h2>📊 ALOS & ADB Heatmap Analysis</h2>
+                <p style="margin: -8px 0 12px 0; font-size: 0.9rem; color: #64748b;">Average Length of Stay (Heat) & Average Daily Budget | 2025 vs 2026</p>
+                <iframe src="alos_adb_heatmap.html"
+                        style="width: 100%; height: 720px; border: none; border-radius: 16px; overflow: hidden; background: transparent;">
+                </iframe>
+            </div>
+            <div class="chart-container chart-container-full">
+                <h2>BOB Revenue Analysis — 5 Year</h2>
+                <iframe src="bob_revenue_analysis.html" style="width:100%;height:900px;border:none;border-radius:8px;"></iframe>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Bugünün tarihini göster
+        const today = new Date();
+        const options = { year: 'numeric', month: 'long', day: 'numeric' };
+        document.getElementById('currentDate').textContent = today.toLocaleDateString('tr-TR', options);
+
+        // Datalabels eklentisini kaydet (bar/line üzerinde değer metni için)
+        if (typeof ChartDataLabels !== 'undefined') {
+            Chart.register(ChartDataLabels);
+        }
+
+        // Günlük pazar grafiğinde (dailyMarketChart) her ayın başına, o günün toplam RN yüksekliği kadar gri dikey çizgi çizen plugin
+        const monthSeparatorPlugin = {
+            id: 'monthSeparator',
+            afterDraw(chart, args, options) {
+                if (!chart.chartArea) return;
+                if (!chart.canvas || chart.canvas.id !== 'dailyMarketChart') return;
+                if (!chart.scales || !chart.scales.x || !chart.scales.y) return;
+                const monthStarts = options && options.monthStarts;
+                const totals = options && options.totals;
+                if (!monthStarts || !Array.isArray(monthStarts)) return;
+                const { ctx, chartArea, scales } = chart;
+                const xScale = scales.x;
+                const yScale = scales.y;
+                ctx.save();
+                const color = (options && options.color) || 'rgba(100, 116, 139, 0.9)'; // daha belirgin gri
+                const lineWidth = (options && options.lineWidth) || 2;
+                ctx.strokeStyle = color;
+                ctx.lineWidth = lineWidth;
+                monthStarts.forEach(function (isStart, index) {
+                    if (!isStart) return;
+                    const x = xScale.getPixelForValue(index);
+                    if (!isFinite(x)) return;
+                    let yTop = chartArea.top;
+                    if (totals && typeof totals[index] === 'number') {
+                        const yVal = yScale.getPixelForValue(totals[index]);
+                        if (isFinite(yVal)) {
+                            yTop = yVal;
+                        }
+                    }
+                    ctx.beginPath();
+                    ctx.moveTo(x, yTop);
+                    ctx.lineTo(x, chartArea.bottom);
+                    ctx.stroke();
+                });
+                ctx.restore();
+            }
+        };
+        if (typeof Chart !== 'undefined' && Chart.register) {
+            Chart.register(monthSeparatorPlugin);
+        }
+
+        // Chart referansları
+        let rnChart, revenueChart, avgRateChart, todayRnByMonthChart, agentPerformanceChart, todayAgentChart, dailyMarketChart, bookingPaceChart, annualTargetChart, marketShareChart, revenueMainmarketChart;
+
+        // Chart renkleri
+        const colors = {
+            primary: '#667eea',
+            secondary: '#764ba2',
+            gradient: function(ctx) {
+                const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+                gradient.addColorStop(0, 'rgba(102, 126, 234, 0.8)');
+                gradient.addColorStop(1, 'rgba(118, 75, 162, 0.4)');
+                return gradient;
+            },
+            // Pazar renkleri: ardışık renkler birbirinden net ayrışacak (farklı ton, yüksek kontrast)
+            markets: [
+                '#2563eb', '#ea580c', '#16a34a', '#9333ea', '#dc2626',
+                '#0891b2', '#ca8a04', '#c026d3', '#059669', '#0284c7',
+                '#65a30d', '#be185d', '#6366f1', '#e11d48', '#84cc16'
+            ]
+        };
+
+        // Supabase client (anon key ile - sadece okuma)
+        // NOT: SUPABASE_URL ve SUPABASE_ANON_KEY değerlerini Supabase Dashboard → Project Settings → API → anon/public key'den alıp buraya yazın
+        const SUPABASE_URL = 'https://gvapdwdxikctalydaoak.supabase.co'; // Supabase proje URL'inizi buraya yazın
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd2YXBkd2R4aWtjdGFseWRhb2FrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyNDY0MDIsImV4cCI6MjA4NjgyMjQwMn0.35f3j7MUDBzXWKxyZp4oiX-koRWW0AlufqrC61jM7xE'; // Supabase anon/public key'inizi buraya yazın
+        let supabaseClient = null;
+        // Supabase script yüklendikten sonra client oluştur
+        if (typeof window.supabase !== 'undefined' && SUPABASE_URL && SUPABASE_ANON_KEY) {
+            try {
+                supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            } catch (err) {
+                console.error('Supabase client oluşturulamadı:', err);
+            }
+        }
+        
+        const REFRESH_INTERVAL_MS = 30 * 60 * 1000; // 30 dakika
+        const ANNUAL_TARGET_EUR = 41160359; // Şimdilik hard-coded hedef
+
+        // Ay kodu (01–12) → repeat guest RN (sabit veri)
+        const REPEAT_GUEST_RN_2026 = {
+            '01': 0, '02': 0, '03': 161, '04': 2735, '05': 3943, '06': 3078,
+            '07': 1895, '08': 1306, '09': 2925, '10': 3585, '11': 152, '12': 0
+        };
+
+        function setLastUpdateTime() {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+            const el = document.getElementById('lastUpdateTime');
+            if (el) el.textContent = timeStr;
+        }
+
+        // Ham API verisini aylık veri objesine çevir (2026, 2025, 2024, 2023, 2022)
+        function buildMonthlyData(rawData) {
+            const allMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const monthlyData = {
+                months: allMonths,
+                rn: Array(12).fill(0),
+                revenue: Array(12).fill(0),
+                avgRate: Array(12).fill(0),
+                rn_2025: Array(12).fill(0),
+                revenue_2025: Array(12).fill(0),
+                avgRate_2025: Array(12).fill(0),
+                rn_2024: Array(12).fill(0),
+                revenue_2024: Array(12).fill(0),
+                avgRate_2024: Array(12).fill(0),
+                rn_2023: Array(12).fill(0),
+                revenue_2023: Array(12).fill(0),
+                avgRate_2023: Array(12).fill(0),
+                rn_2022: Array(12).fill(0),
+                revenue_2022: Array(12).fill(0),
+                avgRate_2022: Array(12).fill(0)
+            };
+            (rawData || []).forEach(row => {
+                const monthIndex = parseInt(row.MONTH_NUM) - 1;
+                if (monthIndex >= 0 && monthIndex < 12) {
+                    monthlyData.rn[monthIndex] = row.TOTAL_RN || 0;
+                    monthlyData.revenue[monthIndex] = row.TOTAL_REVENUE || 0;
+                    monthlyData.avgRate[monthIndex] = row.AVG_RATE || 0;
+                    monthlyData.rn_2025[monthIndex] = row.TOTAL_RN_2025 ?? row.total_rn_2025 ?? 0;
+                    monthlyData.revenue_2025[monthIndex] = row.TOTAL_REVENUE_2025 ?? row.total_revenue_2025 ?? 0;
+                    monthlyData.avgRate_2025[monthIndex] = row.AVG_RATE_2025 ?? row.avg_rate_2025 ?? 0;
+                    monthlyData.rn_2024[monthIndex] = row.TOTAL_RN_2024 ?? row.total_rn_2024 ?? 0;
+                    monthlyData.revenue_2024[monthIndex] = row.TOTAL_REVENUE_2024 ?? row.total_revenue_2024 ?? 0;
+                    monthlyData.avgRate_2024[monthIndex] = row.AVG_RATE_2024 ?? row.avg_rate_2024 ?? 0;
+                    monthlyData.rn_2023[monthIndex] = row.TOTAL_RN_2023 ?? row.total_rn_2023 ?? 0;
+                    monthlyData.revenue_2023[monthIndex] = row.TOTAL_REVENUE_2023 ?? row.total_revenue_2023 ?? 0;
+                    monthlyData.avgRate_2023[monthIndex] = row.AVG_RATE_2023 ?? row.avg_rate_2023 ?? 0;
+                    monthlyData.rn_2022[monthIndex] = row.TOTAL_RN_2022 ?? row.total_rn_2022 ?? 0;
+                    monthlyData.revenue_2022[monthIndex] = row.TOTAL_REVENUE_2022 ?? row.total_revenue_2022 ?? 0;
+                    monthlyData.avgRate_2022[monthIndex] = row.AVG_RATE_2022 ?? row.avg_rate_2022 ?? 0;
+                }
+            });
+            return monthlyData;
+        }
+
+        // Grafikleri sadece veri güncelle (animasyonsuz, sessiz)
+        function refreshChartsData(monthlyData, todayRnData) {
+            if (rnChart) {
+                rnChart.data.datasets[0].data = monthlyData.rn;
+                if (rnChart.data.datasets[1]) rnChart.data.datasets[1].data = monthlyData.rn_2025;
+                if (rnChart.data.datasets[2]) rnChart.data.datasets[2].data = monthlyData.rn_2024;
+                if (rnChart.data.datasets[3]) rnChart.data.datasets[3].data = monthlyData.rn_2023;
+                if (rnChart.data.datasets[4]) rnChart.data.datasets[4].data = monthlyData.rn_2022;
+                rnChart.update('none');
+            }
+            if (revenueChart) {
+                revenueChart.data.datasets[0].data = monthlyData.revenue;
+                if (revenueChart.data.datasets[1]) revenueChart.data.datasets[1].data = monthlyData.revenue_2025;
+                if (revenueChart.data.datasets[2]) revenueChart.data.datasets[2].data = monthlyData.revenue_2024;
+                if (revenueChart.data.datasets[3]) revenueChart.data.datasets[3].data = monthlyData.revenue_2023;
+                if (revenueChart.data.datasets[4]) revenueChart.data.datasets[4].data = monthlyData.revenue_2022;
+                revenueChart.update('none');
+            }
+            if (avgRateChart) {
+                avgRateChart.data.datasets[0].data = monthlyData.avgRate;
+                if (avgRateChart.data.datasets[1]) avgRateChart.data.datasets[1].data = monthlyData.avgRate_2025;
+                if (avgRateChart.data.datasets[2]) avgRateChart.data.datasets[2].data = monthlyData.avgRate_2024;
+                if (avgRateChart.data.datasets[3]) avgRateChart.data.datasets[3].data = monthlyData.avgRate_2023;
+                if (avgRateChart.data.datasets[4]) avgRateChart.data.datasets[4].data = monthlyData.avgRate_2022;
+                avgRateChart.update('none');
+            }
+        }
+
+        // Bugün girilen RN + ADB aylık ham veriyi 12 aylık diziye çevir
+        let lastTodayRnData = null; // sessiz güncellemede datalabels formatter için
+        function buildTodayRnByMonthData(rawData) {
+            const allMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const rn = Array(12).fill(0);
+            const adb = Array(12).fill(null);
+            (rawData || []).forEach(row => {
+                const monthIndex = parseInt(row.MONTH_NUM || row.month_num) - 1;
+                if (monthIndex >= 0 && monthIndex < 12) {
+                    rn[monthIndex] = row.TOTAL_RN ?? row.total_rn ?? 0;
+                    const a = row.ADB ?? row.adb;
+                    adb[monthIndex] = a != null && a !== '' ? Number(a) : null;
+                }
+            });
+            lastTodayRnData = { months: allMonths, rn, adb };
+            return lastTodayRnData;
+        }
+
+        function updateAnnualTargetGauge(data) {
+            const actual = (data.TOTAL_REVENUE_2026 ?? data.total_revenue_2026 ?? 0);
+
+            const target = ANNUAL_TARGET_EUR;
+            const pct = target > 0 ? (actual / target) * 100 : 0;
+            const clamped = Math.max(0, Math.min(100, pct));
+
+            // Kartın büyük değeri
+            const valueEl = document.getElementById('annualTargetValue');
+            if (valueEl) {
+                valueEl.textContent = clamped.toFixed(1) + '%';
+            }
+
+            // Renk: 0-33 kırmızı, 33-66 turuncu, 66-100 yeşil
+            let color = '#16a34a';
+            if (clamped < 33) color = '#dc2626';
+            else if (clamped < 66) color = '#f97316';
+
+            // Radial progress
+            const radial = document.getElementById('annualRadial');
+            if (radial) {
+                radial.style.setProperty('--value', clamped / 100);
+                radial.style.setProperty('--fg', color);
+                radial.setAttribute('data-label', clamped.toFixed(1) + '%');
+            }
+
+            // Alt metinler
+            const remaining = Math.max(target - actual, 0);
+            const actualRow = document.getElementById('annualStatsActual');
+            const targetRow = document.getElementById('annualStatsTarget');
+            const remainingRow = document.getElementById('annualStatsRemaining');
+            if (actualRow) actualRow.textContent = '💰 Gerçekleşen: €' + actual.toLocaleString('tr-TR');
+            if (targetRow) targetRow.textContent = '🎯 Hedef: €' + target.toLocaleString('tr-TR');
+            if (remainingRow) remainingRow.textContent = '📈 Kalan: €' + remaining.toLocaleString('tr-TR');
+
+            // Badge
+            const badgeEl = document.getElementById('annualTargetBadge');
+            if (badgeEl) {
+                badgeEl.textContent = clamped.toFixed(1) + '%';
+                badgeEl.style.backgroundColor = color;
+            }
+        }
+
+        // İlk yükleme veya periyodik güncelleme için veri çek (Supabase'ten)
+        async function loadDashboardData(isSilentRefresh) {
+            if (!supabaseClient) {
+                showError('Supabase bağlantısı yapılandırılmamış.');
+                return;
+            }
+            try {
+                // Supabase'ten en son sync edilmiş verileri çek
+                const [
+                    todayMetricsRes,
+                    monthlyDataRes,
+                    todayRnByMonthRes,
+                    todayRnByMonthMarketRes,
+                    agentPerfRes,
+                    todayAgentRnRes,
+                    dailyMarketRnRes,
+                    bookingPaceRes,
+                    annualTargetRes,
+                    marketMainmarketRes
+                ] = await Promise.all([
+                    supabaseClient.from('today_metrics').select('*').order('synced_at', { ascending: false }).limit(1).single(),
+                    supabaseClient.from('monthly_data').select('*').order('synced_at', { ascending: false }).limit(12),
+                    supabaseClient.from('today_rn_by_month').select('*').order('synced_at', { ascending: false }).limit(12),
+                    supabaseClient.from('today_rn_by_month_market').select('*').order('synced_at', { ascending: false }),
+                    supabaseClient.from('agent_performance').select('*').order('synced_at', { ascending: false }),
+                    supabaseClient.from('today_agent_rn').select('*').order('synced_at', { ascending: false }),
+                    supabaseClient.from('daily_market_rn').select('*').order('synced_at', { ascending: false }).limit(6000),
+                    supabaseClient.from('booking_pace').select('*').order('synced_at', { ascending: false }).limit(12),
+                    supabaseClient.from('annual_target').select('*').order('synced_at', { ascending: false }).limit(1).single(),
+                    supabaseClient.from('market_mainmarket').select('*').order('synced_at', { ascending: false })
+                ]);
+                
+                // Veri formatını uyumlu hale getir (snake_case → UPPER_CASE)
+                const todayDataRaw = todayMetricsRes.data || {};
+                const todayData = {
+                    TODAY_RESERVATIONS: todayDataRaw.today_reservations || 0,
+                    TODAY_RN: todayDataRaw.today_rn || 0,
+                    TODAY_REVENUE: todayDataRaw.today_revenue || 0
+                };
+                // Supabase'ten gelen snake_case verileri UPPER_CASE'e çevir (buildMonthlyData için)
+                const monthlyDataRaw = (monthlyDataRes.data || []).map(row => ({
+                    MONTH_NUM: row.month_num,
+                    MONTH: row.month_label,
+                    TOTAL_RN: row.total_rn,
+                    TOTAL_REVENUE: row.total_revenue,
+                    AVG_RATE: row.avg_rate,
+                    TOTAL_RN_2025: row.total_rn_2025,
+                    TOTAL_REVENUE_2025: row.total_revenue_2025,
+                    AVG_RATE_2025: row.avg_rate_2025,
+                    TOTAL_RN_2024: row.total_rn_2024,
+                    TOTAL_REVENUE_2024: row.total_revenue_2024,
+                    AVG_RATE_2024: row.avg_rate_2024,
+                    TOTAL_RN_2023: row.total_rn_2023,
+                    TOTAL_REVENUE_2023: row.total_revenue_2023,
+                    AVG_RATE_2023: row.avg_rate_2023,
+                    TOTAL_RN_2022: row.total_rn_2022,
+                    TOTAL_REVENUE_2022: row.total_revenue_2022,
+                    AVG_RATE_2022: row.avg_rate_2022
+                }));
+                const todayRnRaw = (todayRnByMonthRes.data || []).map(row => ({
+                    MONTH_NUM: row.month_num,
+                    TOTAL_RN: row.total_rn,
+                    TOTAL_REVENUE: row.total_revenue,
+                    ADB: row.adb
+                }));
+                const todayRnByMonthMarketRaw = (todayRnByMonthMarketRes.data || []).map(row => ({
+                    MONTH_NUM: row.month_num,
+                    MARKET: row.market,
+                    RN: row.rn,
+                    MARKET_TOTAL: row.market_total
+                }));
+                const agentPerfRaw = (agentPerfRes.data || []).map(row => ({
+                    SEGMENT: row.segment,
+                    MARKET: row.market,
+                    REVENUE_2026: row.revenue_2026,
+                    REVENUE_2025: row.revenue_2025,
+                    AGENT_ORDER: row.agent_order
+                }));
+                const todayAgentRaw = (todayAgentRnRes.data || []).map(row => ({
+                    SEGMENT: row.segment,
+                    RN_COUNT: row.rn_count,
+                    REVENUE: row.revenue
+                }));
+                const dailyMarketRaw = { data2026: (dailyMarketRnRes.data || []).map(row => ({
+                    DATE_STR: row.date_str,
+                    MARKET: row.market,
+                    RN_COUNT: row.rn_count,
+                    MARKET_TOTAL: row.market_total
+                })), daily_2025_totals: [], daily_2024_totals: [], daily_2023_totals: [], daily_2022_totals: [] };
+                const paceDataRaw = (bookingPaceRes.data || []).map(row => ({
+                    MONTH_NUM: row.month_num,
+                    MONTH: row.month_label,
+                    LAST_30_DAYS_RN: row.last_30_days_rn,
+                    LAST_15_DAYS_RN: row.last_15_days_rn,
+                    LAST_30_DAYS_2025_RN: row.last_30_days_2025_rn,
+                    LAST_15_DAYS_2025_RN: row.last_15_days_2025_rn
+                }));
+                const annualTargetData = annualTargetRes.data ? { TOTAL_REVENUE_2026: annualTargetRes.data.total_revenue_2026 || 0 } : { TOTAL_REVENUE_2026: 0 };
+                const mainmarketRaw = (marketMainmarketRes.data || []).map(row => ({
+                    SEGMENT: row.segment,
+                    REVENUE_2026: row.revenue_2026,
+                    REVENUE_2025: row.revenue_2025,
+                    REVENUE_2024: row.revenue_2024,
+                    REVENUE_2023: row.revenue_2023,
+                    REVENUE_2022: row.revenue_2022,
+                    RN_2026: row.rn_2026,
+                    RN_2025: row.rn_2025,
+                    RN_2024: row.rn_2024,
+                    RN_2023: row.rn_2023,
+                    RN_2022: row.rn_2022
+                }));
+
+                const monthlyData = buildMonthlyData(monthlyDataRaw);
+                const todayRnData = buildTodayRnByMonthData(todayRnRaw);
+                updateTodayMetrics(todayData);
+
+                updateAnnualTargetGauge(annualTargetData);
+
+                if (isSilentRefresh && rnChart) {
+                    refreshChartsData(monthlyData, todayRnData);
+                    createTodayRnByMonthChart(todayRnData, todayRnByMonthMarketRaw);
+                    updateMarketShareChart(mainmarketRaw);
+                    updateRevenueMainmarketChart(mainmarketRaw);
+                    updateAgentPerformanceChart(agentPerfRaw);
+                    updateTodayAgentChart(todayAgentRaw);
+                    updateBookingPaceChart(paceDataRaw);
+                    updateDailyMarketChart(dailyMarketRaw);
+                } else {
+                    updateCharts(monthlyData);
+                    createTodayRnByMonthChart(todayRnData, todayRnByMonthMarketRaw);
+                    updateMarketShareChart(mainmarketRaw);
+                    updateRevenueMainmarketChart(mainmarketRaw);
+                    updateAgentPerformanceChart(agentPerfRaw);
+                    updateTodayAgentChart(todayAgentRaw);
+                    updateBookingPaceChart(paceDataRaw);
+                    updateDailyMarketChart(dailyMarketRaw);
+                }
+
+                setLastUpdateTime();
+
+                if (!isSilentRefresh) {
+                    document.getElementById('loadingIndicator').style.display = 'none';
+                    document.getElementById('dashboardContent').style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Veri yükleme hatası:', error);
+                if (!isSilentRefresh) showError('Veri yüklenirken hata oluştu: ' + error.message);
+            }
+        }
+
+        // 30 dakikada bir arka planda sessiz güncelleme
+        function startAutoRefresh() {
+            setInterval(() => loadDashboardData(true), REFRESH_INTERVAL_MS);
+        }
+
+        function updateTodayMetrics(data) {
+            document.getElementById('todayReservations').textContent = 
+                (data.TODAY_RESERVATIONS || 0).toLocaleString('tr-TR');
+            document.getElementById('todayRN').textContent = 
+                (data.TODAY_RN || 0).toLocaleString('tr-TR');
+            document.getElementById('todayRevenue').textContent = 
+                '€' + (data.TODAY_REVENUE || 0).toLocaleString('tr-TR');
+        }
+
+        function updateCharts(monthlyData) {
+            createRNChart(monthlyData);
+            createRevenueChart(monthlyData);
+            createAvgRateChart(monthlyData);
+        }
+
+        function createRNChart(data) {
+            const ctx = document.getElementById('rnChart').getContext('2d');
+            const lineOpts = (label, arr, color, hidden) => (arr && arr.length) ? {
+                type: 'line',
+                label: label + ' (OTB)',
+                data: arr,
+                borderColor: color,
+                backgroundColor: 'transparent',
+                borderWidth: 2,
+                fill: false,
+                tension: 0.3,
+                pointRadius: 3,
+                pointHoverRadius: 5,
+                order: 0,
+                hidden: !!hidden,
+                datalabels: { display: false }
+            } : null;
+            const line2025 = lineOpts('2025', data.rn_2025, 'rgba(120, 120, 120, 0.9)', false);
+            const line2024 = lineOpts('2024', data.rn_2024, 'rgba(34, 197, 94, 0.9)', true);
+            const line2023 = lineOpts('2023', data.rn_2023, 'rgba(234, 88, 12, 0.9)', true);
+            const line2022 = lineOpts('2022', data.rn_2022, 'rgba(139, 92, 246, 0.9)', true);
+            const repeatGuestRnArr = ['01','02','03','04','05','06','07','08','09','10','11','12'].map(m => REPEAT_GUEST_RN_2026[m] ?? 0);
+            const lineRepeatGuest = {
+                type: 'line',
+                label: 'Repeat Guest RN',
+                data: repeatGuestRnArr,
+                borderColor: 'rgba(249, 115, 22, 0.9)',
+                backgroundColor: 'transparent',
+                borderWidth: 2,
+                fill: false,
+                tension: 0.3,
+                pointRadius: 3,
+                pointHoverRadius: 5,
+                order: 0,
+                hidden: false,
+                datalabels: {
+                    display: true,
+                    anchor: 'end',
+                    align: 'top',
+                    offset: 2,
+                    formatter: (value, context) => {
+                        const totalRn = data.rn && data.rn[context.dataIndex];
+                        if (totalRn == null || totalRn === 0) return '';
+                        const pct = (value / totalRn) * 100;
+                        return '%' + pct.toFixed(1);
+                    },
+                    font: { size: 11, weight: 'bold' },
+                    color: 'rgba(249, 115, 22, 0.95)'
+                }
+            };
+            const lineDatasets = [line2025, line2024, line2023, line2022, lineRepeatGuest].filter(Boolean);
+            rnChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.months,
+                    datasets: [
+                        {
+                            label: 'Room Nights',
+                            data: data.rn,
+                            backgroundColor: colors.gradient(ctx),
+                            borderColor: colors.primary,
+                            borderWidth: 2,
+                            borderRadius: 8,
+                            borderSkipped: false,
+                        },
+                        ...lineDatasets
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { display: lineDatasets.length > 0 },
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'top',
+                            offset: 4,
+                            formatter: (value, context) => {
+                                // Sadece bar (2026 RN) için göster, line serileri için boş
+                                if (context.datasetIndex !== 0 || value == null) return '';
+                                const monthIndex = context.dataIndex; // 0..11
+                                const year = 2026;
+                                const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+                                const maxRn = 508 * daysInMonth;
+                                const occ = maxRn ? (value / maxRn) * 100 : 0;
+                                const percentStr = occ.toFixed(0);
+                                return value.toLocaleString('tr-TR') + ' (%' + percentStr + ')';
+                            },
+                            font: { size: 13, weight: 'bold' },
+                            color: '#333'
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0,0,0,0.8)',
+                            padding: 12,
+                            mode: 'index',
+                            callbacks: {
+                                label: function(context) {
+                                    return (context.dataset.label || '') + ': ' + context.parsed.y.toLocaleString('tr-TR') + ' RN';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return value.toLocaleString('tr-TR');
+                                }
+                            },
+                            grid: { color: 'rgba(0,0,0,0.05)' }
+                        },
+                        x: { grid: { display: false } }
+                    }
+                }
+            });
+            ctx.canvas.closest('.chart-container')._chart = rnChart;
+        }
+
+        function createRevenueChart(data) {
+            const ctx = document.getElementById('revenueChart').getContext('2d');
+            const lineOpts = (label, arr, color, hidden) => (arr && arr.length) ? {
+                type: 'line',
+                label: label + ' (OTB)',
+                data: arr,
+                borderColor: color,
+                backgroundColor: 'transparent',
+                borderWidth: 2,
+                fill: false,
+                tension: 0.3,
+                pointRadius: 3,
+                pointHoverRadius: 5,
+                order: 0,
+                hidden: !!hidden,
+                datalabels: { display: false }
+            } : null;
+            const line2025 = lineOpts('2025', data.revenue_2025, 'rgba(120, 120, 120, 0.9)', false);
+            const line2024 = lineOpts('2024', data.revenue_2024, 'rgba(34, 197, 94, 0.9)', true);
+            const line2023 = lineOpts('2023', data.revenue_2023, 'rgba(234, 88, 12, 0.9)', true);
+            const line2022 = lineOpts('2022', data.revenue_2022, 'rgba(139, 92, 246, 0.9)', true);
+            const lineDatasets = [line2025, line2024, line2023, line2022].filter(Boolean);
+            revenueChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.months,
+                    datasets: [
+                        {
+                            label: 'Revenue (EUR)',
+                            data: data.revenue,
+                            backgroundColor: colors.gradient(ctx),
+                            borderColor: colors.primary,
+                            borderWidth: 2,
+                            borderRadius: 8,
+                            borderSkipped: false,
+                        },
+                        ...lineDatasets
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { display: lineDatasets.length > 0 },
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'top',
+                            offset: 4,
+                            formatter: (value, ctx) => ctx.datasetIndex !== 0 ? '' : (value != null ? '€' + (value >= 1000 ? (value/1000).toFixed(1) + 'K' : value.toLocaleString('tr-TR')) : ''),
+                            font: { size: 11, weight: 'bold' },
+                            color: '#333'
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0,0,0,0.8)',
+                            padding: 12,
+                            mode: 'index',
+                            callbacks: {
+                                label: function(context) {
+                                    return (context.dataset.label || '') + ': €' + context.parsed.y.toLocaleString('tr-TR');
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '€' + (value / 1000).toFixed(0) + 'K';
+                                }
+                            },
+                            grid: { color: 'rgba(0,0,0,0.05)' }
+                        },
+                        x: { grid: { display: false } }
+                    }
+                }
+            });
+            ctx.canvas.closest('.chart-container')._chart = revenueChart;
+        }
+
+        function createAvgRateChart(data) {
+            const ctx = document.getElementById('avgRateChart').getContext('2d');
+            const lineOpts = (label, arr, color, hidden) => (arr && arr.length) ? {
+                type: 'line',
+                label: label + ' (OTB)',
+                data: arr,
+                borderColor: color,
+                backgroundColor: 'transparent',
+                borderWidth: 2,
+                fill: false,
+                tension: 0.3,
+                pointRadius: 3,
+                pointHoverRadius: 5,
+                order: 0,
+                hidden: !!hidden,
+                datalabels: { display: false }
+            } : null;
+            const line2025 = lineOpts('2025', data.avgRate_2025, 'rgba(120, 120, 120, 0.9)', false);
+            const line2024 = lineOpts('2024', data.avgRate_2024, 'rgba(34, 197, 94, 0.9)', true);
+            const line2023 = lineOpts('2023', data.avgRate_2023, 'rgba(234, 88, 12, 0.9)', true);
+            const line2022 = lineOpts('2022', data.avgRate_2022, 'rgba(139, 92, 246, 0.9)', true);
+            const lineDatasets = [line2025, line2024, line2023, line2022].filter(Boolean);
+            avgRateChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.months,
+                    datasets: [
+                        {
+                            label: 'Average Rate (EUR)',
+                            data: data.avgRate,
+                            backgroundColor: colors.gradient(ctx),
+                            borderColor: colors.secondary,
+                            borderWidth: 2,
+                            borderRadius: 8,
+                            borderSkipped: false,
+                        },
+                        ...lineDatasets
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { display: lineDatasets.length > 0 },
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'top',
+                            offset: 4,
+                            formatter: (value, ctx) => ctx.datasetIndex !== 0 ? '' : (value != null ? '€' + value.toFixed(0) : ''),
+                            font: { size: 13, weight: 'bold' },
+                            color: '#333'
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0,0,0,0.8)',
+                            padding: 12,
+                            mode: 'index',
+                            callbacks: {
+                                label: function(context) {
+                                    return (context.dataset.label || '') + ': €' + context.parsed.y.toFixed(2);
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            ticks: {
+                                callback: function(value) {
+                                    return '€' + value;
+                                }
+                            },
+                            grid: { color: 'rgba(0,0,0,0.05)' }
+                        },
+                        x: { grid: { display: false } }
+                    }
+                }
+            });
+            ctx.canvas.closest('.chart-container')._chart = avgRateChart;
+        }
+
+        function createTodayRnByMonthChart(data, marketRaw) {
+            const ctx = document.getElementById('todayRnByMonthChart').getContext('2d');
+            const allMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+            if (!marketRaw || !marketRaw.length) {
+                todayRnByMonthChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: data.months,
+                        datasets: [{
+                            label: 'Room Nights',
+                            data: data.rn,
+                            backgroundColor: colors.gradient(ctx),
+                            borderColor: colors.primary,
+                            borderWidth: 2,
+                            borderRadius: 8,
+                            borderSkipped: false,
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: {
+                            legend: { display: false },
+                            datalabels: {
+                                anchor: 'end', align: 'top', offset: 4,
+                                formatter: (value, context) => {
+                                    if (value == null) return '';
+                                    const adbVal = lastTodayRnData && lastTodayRnData.adb && lastTodayRnData.adb[context.dataIndex];
+                                    const adbStr = (adbVal != null && adbVal !== 0) ? ' (€' + Number(adbVal).toFixed(0) + ')' : '';
+                                    return value.toLocaleString('tr-TR') + adbStr;
+                                },
+                                font: { size: 11, weight: 'bold' }, color: '#333'
+                            },
+                            tooltip: {
+                                backgroundColor: 'rgba(0,0,0,0.8)', padding: 12,
+                                callbacks: {
+                                    label: function(context) {
+                                        const adbVal = lastTodayRnData && lastTodayRnData.adb && lastTodayRnData.adb[context.dataIndex];
+                                        const adbStr = (adbVal != null && adbVal !== 0) ? ' · ADB: €' + Number(adbVal).toFixed(2) : '';
+                                        return context.parsed.y.toLocaleString('tr-TR') + ' RN' + adbStr;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: { beginAtZero: true, ticks: { callback: v => v.toLocaleString('tr-TR') }, grid: { color: 'rgba(0,0,0,0.05)' } },
+                            x: { grid: { display: false } }
+                        }
+                    }
+                });
+                ctx.canvas.closest('.chart-container')._chart = todayRnByMonthChart;
+                return;
+            }
+
+            const monthMap = {};
+            const marketOrder = [];
+            const seen = new Set();
+            (marketRaw || []).forEach(row => {
+                const month = row.MONTH_NUM || row.month_num;
+                const market = row.MARKET || row.market;
+                const rn = row.RN ?? row.rn ?? 0;
+                if (!month) return;
+                if (!monthMap[month]) monthMap[month] = {};
+                monthMap[month][market] = rn;
+                if (!seen.has(market)) {
+                    seen.add(market);
+                    marketOrder.push(market);
+                }
+            });
+
+            const monthNums = ['01','02','03','04','05','06','07','08','09','10','11','12'];
+            const datasets = marketOrder.map((market, index) => ({
+                label: market,
+                data: monthNums.map(m => monthMap[m] && monthMap[m][market] || 0),
+                backgroundColor: colors.markets[index % colors.markets.length],
+                borderColor: 'white',
+                borderWidth: 1,
+                borderRadius: 8,
+                borderSkipped: false
+            }));
+
+            if (todayRnByMonthChart) {
+                todayRnByMonthChart.destroy();
+                todayRnByMonthChart = null;
+            }
+            todayRnByMonthChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: allMonths,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: { boxWidth: 14, font: { size: 10 } }
+                        },
+                        datalabels: {
+                            display: (ctx) => ctx.datasetIndex === datasets.length - 1,
+                            anchor: 'end',
+                            align: 'top',
+                            offset: 2,
+                            formatter: (value, context) => {
+                                const total = context.chart.data.datasets.reduce((s, d) => s + (d.data[context.dataIndex] || 0), 0);
+                                if (total == null || total === 0) return '';
+                                const adbVal = lastTodayRnData && lastTodayRnData.adb && lastTodayRnData.adb[context.dataIndex];
+                                const adbStr = (adbVal != null && adbVal !== 0) ? ' (€' + Number(adbVal).toFixed(0) + ')' : '';
+                                return total.toLocaleString('tr-TR') + adbStr;
+                            },
+                            font: { size: 10, weight: 'bold' },
+                            color: '#333'
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: 'rgba(0,0,0,0.8)',
+                            padding: 12,
+                            callbacks: {
+                                label: function(context) {
+                                    const adbVal = context.datasetIndex === datasets.length - 1 && lastTodayRnData && lastTodayRnData.adb
+                                        ? lastTodayRnData.adb[context.dataIndex] : null;
+                                    const adbStr = (adbVal != null && adbVal !== 0) ? ' · ADB: €' + Number(adbVal).toFixed(2) : '';
+                                    return context.dataset.label + ': ' + context.parsed.y.toLocaleString('tr-TR') + ' RN' + adbStr;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            stacked: true,
+                            beginAtZero: true,
+                            ticks: { callback: v => v.toLocaleString('tr-TR') },
+                            grid: { color: 'rgba(0,0,0,0.05)' }
+                        },
+                        x: { stacked: true, grid: { display: false } }
+                    }
+                }
+            });
+            ctx.canvas.closest('.chart-container')._chart = todayRnByMonthChart;
+        }
+
+        let lastTodayAgentData = null;
+        function updateTodayAgentChart(rawData) {
+            const segments = [];
+            const rn = [];
+            const revenue = [];
+            (rawData || []).forEach(row => {
+                segments.push(row.SEGMENT || row.segment || '');
+                rn.push(row.RN_COUNT ?? row.rn_count ?? 0);
+                revenue.push(row.REVENUE ?? row.revenue ?? 0);
+            });
+            lastTodayAgentData = { segments, rn, revenue };
+
+            const ctx = document.getElementById('todayAgentChart').getContext('2d');
+            if (todayAgentChart) {
+                todayAgentChart.destroy();
+                todayAgentChart = null;
+            }
+            todayAgentChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: segments,
+                    datasets: [{
+                        label: 'RN',
+                        data: rn,
+                        backgroundColor: colors.gradient(ctx),
+                        borderColor: colors.primary,
+                        borderWidth: 2,
+                        borderRadius: 8,
+                        borderSkipped: false,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    indexAxis: 'y',
+                    plugins: {
+                        legend: { display: false },
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'end',
+                            formatter: (value, context) => {
+                                if (value == null) return '';
+                                const rev = lastTodayAgentData && lastTodayAgentData.revenue[context.dataIndex];
+                                const revStr = (rev != null && rev !== 0) ? ' (€' + Number(rev).toLocaleString('tr-TR') + ')' : '';
+                                return value.toLocaleString('tr-TR') + ' RN' + revStr;
+                            },
+                            font: { size: 11, weight: 'bold' },
+                            color: '#333'
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0,0,0,0.8)',
+                            padding: 12,
+                            callbacks: {
+                                label: function(context) {
+                                    const rev = lastTodayAgentData && lastTodayAgentData.revenue[context.dataIndex];
+                                    return context.parsed.x.toLocaleString('tr-TR') + ' RN · €' + (rev != null ? Number(rev).toLocaleString('tr-TR') : '0');
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            ticks: { callback: v => v.toLocaleString('tr-TR') },
+                            grid: { color: 'rgba(0,0,0,0.05)' }
+                        },
+                        y: {
+                            ticks: { font: { size: 11 } },
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+            ctx.canvas.closest('.chart-container')._chart = todayAgentChart;
+        }
+
+        var lastAgentPerfRaw = null;
+
+        function updateAgentPerformanceChart(rawData, sortByYear) {
+            sortByYear = sortByYear || '2026';
+            if (rawData) lastAgentPerfRaw = rawData;
+            const rows = lastAgentPerfRaw || [];
+            var agentOrder = [];
+            if (sortByYear === '2025') {
+                var rev2025BySeg = {};
+                rows.forEach(function(row) {
+                    var seg = row.SEGMENT || row.segment || '';
+                    if (!seg) return;
+                    if (!rev2025BySeg[seg]) rev2025BySeg[seg] = 0;
+                    rev2025BySeg[seg] += row.REVENUE_2025 ?? row.revenue_2025 ?? 0;
+                });
+                Object.keys(rev2025BySeg).forEach(function(seg) {
+                    agentOrder.push({ segment: seg, order: -rev2025BySeg[seg] });
+                });
+                agentOrder.sort(function(a, b) { return a.order - b.order; });
+            } else {
+                var seen = {};
+                rows.forEach(function(row) {
+                    var seg = row.SEGMENT || row.segment || '';
+                    var order = row.AGENT_ORDER ?? row.agent_order ?? 0;
+                    if (seg && !seen[seg]) {
+                        seen[seg] = order;
+                        agentOrder.push({ segment: seg, order: order });
+                    }
+                });
+                agentOrder.sort(function(a, b) { return a.order - b.order; });
+            }
+            var agents = agentOrder.map(function(a) { return a.segment; });
+
+            var marketList = [];
+            var seenMarket = {};
+            rows.forEach(function(row) {
+                var m = row.MARKET || row.market || 'Other';
+                if (!seenMarket[m]) {
+                    seenMarket[m] = true;
+                    marketList.push(m);
+                }
+            });
+
+            var agentIndex = {};
+            agents.forEach(function(a, i) { agentIndex[a] = i; });
+
+            var dataByMarket2026 = {};
+            var dataByMarket2025 = {};
+            marketList.forEach(function(m) {
+                dataByMarket2026[m] = agents.map(function() { return 0; });
+                dataByMarket2025[m] = agents.map(function() { return 0; });
+            });
+            rows.forEach(function(row) {
+                var seg = row.SEGMENT || row.segment || '';
+                var m = row.MARKET || row.market || 'Other';
+                var i = agentIndex[seg];
+                if (i === undefined) return;
+                if (dataByMarket2026[m]) dataByMarket2026[m][i] = row.REVENUE_2026 ?? row.revenue_2026 ?? 0;
+                if (dataByMarket2025[m]) dataByMarket2025[m][i] = row.REVENUE_2025 ?? row.revenue_2025 ?? 0;
+            });
+
+            var numMarkets = marketList.length;
+            var hexToRgba = function(hex, a) {
+                if (typeof hex !== 'string') return 'rgba(120,120,120,' + a + ')';
+                if (hex.indexOf('rgb') === 0) return hex.replace(')', ', ' + a + ')').replace('rgb', 'rgba');
+                var m = hex.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
+                if (!m) return 'rgba(120,120,120,' + a + ')';
+                return 'rgba(' + parseInt(m[1], 16) + ',' + parseInt(m[2], 16) + ',' + parseInt(m[3], 16) + ',' + a + ')';
+            };
+            var datasets = [];
+            marketList.forEach(function(market, index) {
+                datasets.push({
+                    label: market + ' (2026)',
+                    data: dataByMarket2026[market],
+                    backgroundColor: colors.markets[index % colors.markets.length],
+                    borderColor: 'white',
+                    borderWidth: 1,
+                    borderRadius: 8,
+                    borderSkipped: false,
+                    stack: '2026'
+                });
+            });
+            marketList.forEach(function(market, index) {
+                datasets.push({
+                    label: market + ' (2025)',
+                    data: dataByMarket2025[market],
+                    backgroundColor: hexToRgba(colors.markets[index % colors.markets.length], 0.55),
+                    borderColor: 'rgba(200,200,200,0.8)',
+                    borderWidth: 1,
+                    borderRadius: 8,
+                    borderSkipped: false,
+                    stack: '2025'
+                });
+            });
+
+            var ctx = document.getElementById('agentPerformanceChart').getContext('2d');
+            if (agentPerformanceChart) {
+                agentPerformanceChart.destroy();
+                agentPerformanceChart = null;
+            }
+            agentPerformanceChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: agents,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    indexAxis: 'y',
+                    plugins: {
+                        legend: { display: true, position: 'top', labels: { boxWidth: 12, font: { size: 9 } } },
+                        datalabels: {
+                            display: function(context) {
+                                var ds = context.chart.data.datasets;
+                                var stack = ds[context.datasetIndex].stack;
+                                var lastInStack = context.datasetIndex === (stack === '2026' ? numMarkets - 1 : ds.length - 1);
+                                return lastInStack;
+                            },
+                            anchor: 'end',
+                            align: 'end',
+                            formatter: function(value, context) {
+                                var ds = context.chart.data.datasets;
+                                var stack = ds[context.datasetIndex].stack;
+                                var start = stack === '2026' ? 0 : numMarkets;
+                                var end = stack === '2026' ? numMarkets : ds.length;
+                                var total = 0;
+                                for (var j = start; j < end; j++) total += (ds[j].data[context.dataIndex] || 0);
+                                if (total === 0) return '';
+                                return total >= 1000000 ? (total / 1000000).toFixed(1) + 'M' : (total >= 1000 ? (total / 1000).toFixed(1) + 'K' : total.toLocaleString('tr-TR'));
+                            },
+                            font: { size: 10, weight: 'bold' },
+                            color: '#333'
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: 'rgba(0,0,0,0.8)',
+                            padding: 12,
+                            callbacks: {
+                                label: function(context) {
+                                    var v = context.parsed.x != null ? context.parsed.x : 0;
+                                    return context.dataset.label + ': €' + (typeof v === 'number' ? v.toLocaleString('tr-TR') : v);
+                                },
+                                afterBody: function(tooltipItems) {
+                                    if (!tooltipItems.length) return '';
+                                    var byStack = { '2026': 0, '2025': 0 };
+                                    tooltipItems.forEach(function(t) {
+                                        var stack = t.dataset.stack;
+                                        if (stack) byStack[stack] = (byStack[stack] || 0) + (t.parsed.x || 0);
+                                    });
+                                    var parts = [];
+                                    if (byStack['2026']) parts.push('2026 toplam: €' + byStack['2026'].toLocaleString('tr-TR'));
+                                    if (byStack['2025']) parts.push('2025 toplam: €' + byStack['2025'].toLocaleString('tr-TR'));
+                                    return parts.join('\n');
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            stacked: true,
+                            beginAtZero: true,
+                            ticks: { callback: function(v) { return v >= 1000000 ? (v/1000000).toFixed(1) + 'M' : (v >= 1000 ? (v/1000).toFixed(0) + 'K' : v); } },
+                            grid: { color: 'rgba(0,0,0,0.05)' }
+                        },
+                        y: {
+                            stacked: true,
+                            ticks: { font: { size: 10 } },
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+            ctx.canvas.closest('.chart-container')._chart = agentPerformanceChart;
+        }
+
+        function updateBookingPaceChart(rawData) {
+            const months = [];
+            const last30_2026 = [];
+            const last15_2026 = [];
+            const last30_2025 = [];
+            const last15_2025 = [];
+
+            (rawData || []).forEach(row => {
+                months.push(row.MONTH || row.month || '');
+                last30_2026.push(row.LAST_30_DAYS_RN ?? row.last_30_days_rn ?? 0);
+                last15_2026.push(row.LAST_15_DAYS_RN ?? row.last_15_days_rn ?? 0);
+                last30_2025.push(row.LAST_30_DAYS_2025_RN ?? row.last_30_days_2025_rn ?? 0);
+                last15_2025.push(row.LAST_15_DAYS_2025_RN ?? row.last_15_days_2025_rn ?? 0);
+            });
+
+            const ctx = document.getElementById('bookingPaceChart').getContext('2d');
+            if (bookingPaceChart) {
+                bookingPaceChart.destroy();
+                bookingPaceChart = null;
+            }
+            bookingPaceChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: months,
+                    datasets: [
+                        {
+                            label: 'Son 30 Gün (16–30 gün arası) - 2026',
+                            data: last30_2026,
+                            backgroundColor: 'rgba(67, 233, 123, 0.35)',
+                            borderColor: 'rgba(67, 233, 123, 1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.4,
+                            stack: 'stack1',
+                            hidden: true
+                        },
+                        {
+                            label: 'Son 15 Gün - 2026',
+                            data: last15_2026,
+                            backgroundColor: 'rgba(250, 112, 154, 0.45)',
+                            borderColor: 'rgba(250, 112, 154, 1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.4,
+                            stack: 'stack1'
+                        },
+                        {
+                            type: 'line',
+                            label: 'Son 30 Gün (16–30) - 2025',
+                            data: last30_2025,
+                            backgroundColor: 'transparent',
+                            borderColor: 'rgba(120, 120, 120, 0.9)',
+                            borderWidth: 2,
+                            borderDash: [],
+                            fill: false,
+                            tension: 0.4,
+                            pointRadius: 3,
+                            pointHoverRadius: 5,
+                            datalabels: { display: false },
+                            hidden: true
+                        },
+                        {
+                            type: 'line',
+                            label: 'Son 15 Gün - 2025',
+                            data: last15_2025,
+                            backgroundColor: 'transparent',
+                            borderColor: 'rgba(120, 120, 120, 0.9)',
+                            borderWidth: 2,
+                            borderDash: [10, 5],
+                            fill: false,
+                            tension: 0.4,
+                            pointRadius: 3,
+                            pointHoverRadius: 5,
+                            datalabels: { display: false }
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: { boxWidth: 14, font: { size: 11 } }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: 'rgba(0,0,0,0.8)',
+                            padding: 12,
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': ' + context.parsed.y.toLocaleString('tr-TR') + ' RN';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            stacked: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return value.toLocaleString('tr-TR');
+                                }
+                            },
+                            grid: { color: 'rgba(0,0,0,0.05)' }
+                        },
+                        x: { grid: { display: false } }
+                    }
+                }
+            });
+            ctx.canvas.closest('.chart-container')._chart = bookingPaceChart;
+        }
+
+        function updateDailyMarketChart(rawData) {
+            const rows = rawData && rawData.data2026 ? rawData.data2026 : (rawData || []);
+            const dateMap = {};
+            const markets = new Set();
+
+            rows.forEach(row => {
+                const date = row.DATE_STR || row.date_str;
+                const market = row.MARKET || row.market;
+                const rn = row.RN_COUNT ?? row.rn_count ?? 0;
+                if (!date) return;
+                if (!dateMap[date]) dateMap[date] = {};
+                dateMap[date][market] = rn;
+                markets.add(market);
+            });
+
+            const dates = Object.keys(dateMap).sort();
+            const monthStarts = dates.map(d => {
+                const day = d.slice(8, 10);
+                return day === '01';
+            });
+            const marketArray = Array.from(markets);
+
+            const toMap = (arr) => {
+                const m = {};
+                (arr || []).forEach(r => {
+                    const key = r.MONTH_DAY || r.month_day;
+                    if (key) m[key] = r.TOTAL_RN ?? r.total_rn ?? 0;
+                });
+                return m;
+            };
+            const map2025 = toMap(rawData && rawData.daily_2025_totals ? rawData.daily_2025_totals : []);
+            const map2024 = toMap(rawData && rawData.daily_2024_totals ? rawData.daily_2024_totals : []);
+            const map2023 = toMap(rawData && rawData.daily_2023_totals ? rawData.daily_2023_totals : []);
+            const map2022 = toMap(rawData && rawData.daily_2022_totals ? rawData.daily_2022_totals : []);
+            const line2025Data = dates.map(d => map2025[d.slice(5, 10)] ?? 0);
+            const line2024Data = dates.map(d => map2024[d.slice(5, 10)] ?? 0);
+            const line2023Data = dates.map(d => map2023[d.slice(5, 10)] ?? 0);
+            const line2022Data = dates.map(d => map2022[d.slice(5, 10)] ?? 0);
+
+            const barDatasets = marketArray.map((market, index) => ({
+                label: market,
+                data: dates.map(date => dateMap[date][market] || 0),
+                backgroundColor: colors.markets[index % colors.markets.length],
+                borderColor: 'white',
+                borderWidth: 1
+            }));
+
+            const totalsByIndex = dates.map((d, idx) =>
+                barDatasets.reduce((sum, ds) => sum + (ds.data[idx] || 0), 0)
+            );
+
+            const lineOpt = (label, dataArr, color, hidden) => ({
+                type: 'line',
+                label: label + ' (OTB)',
+                data: dataArr,
+                borderColor: color,
+                backgroundColor: 'transparent',
+                borderWidth: 2,
+                fill: false,
+                tension: 0.3,
+                pointRadius: 2,
+                pointHoverRadius: 5,
+                order: 0,
+                hidden: !!hidden,
+                datalabels: { display: false },
+                yAxisID: 'yLines'
+            });
+            const line2025 = (rawData && rawData.daily_2025_totals && rawData.daily_2025_totals.length) ? lineOpt('2025', line2025Data, 'rgba(120, 120, 120, 0.9)', false) : null;
+            const line2024 = (rawData && rawData.daily_2024_totals && rawData.daily_2024_totals.length) ? lineOpt('2024', line2024Data, 'rgba(34, 197, 94, 0.9)', true) : null;
+            const line2023 = (rawData && rawData.daily_2023_totals && rawData.daily_2023_totals.length) ? lineOpt('2023', line2023Data, 'rgba(234, 88, 12, 0.9)', true) : null;
+            const line2022 = (rawData && rawData.daily_2022_totals && rawData.daily_2022_totals.length) ? lineOpt('2022', line2022Data, 'rgba(139, 92, 246, 0.9)', true) : null;
+            const lineDatasets = [line2025, line2024, line2023, line2022].filter(Boolean);
+
+            const ctx = document.getElementById('dailyMarketChart').getContext('2d');
+            if (dailyMarketChart) {
+                dailyMarketChart.destroy();
+                dailyMarketChart = null;
+            }
+            dailyMarketChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: dates.map(d => {
+                        const date = new Date(d);
+                        return date.toLocaleDateString('tr-TR', { month: 'short', day: 'numeric' });
+                    }),
+                    datasets: [...barDatasets, ...lineDatasets]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        datalabels: { display: false },
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: { boxWidth: 15, font: { size: 11 } }
+                        },
+                        monthSeparator: {
+                            color: 'rgba(100, 116, 139, 0.9)',
+                            lineWidth: 2,
+                            monthStarts: monthStarts,
+                            totals: totalsByIndex
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: 'rgba(0,0,0,0.8)',
+                            padding: 12,
+                            callbacks: {
+                                label: function(context) {
+                                    const v = context.parsed.y ?? context.parsed;
+                                    const num = typeof v === 'number' ? v.toLocaleString('tr-TR') + ' RN' : String(v);
+                                    return context.dataset.label + ': ' + num;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            stacked: true,
+                            ticks: { maxRotation: 45, minRotation: 45, font: { size: 9 } },
+                            grid: { display: false }
+                        },
+                        y: {
+                            stacked: true,
+                            beginAtZero: true,
+                            position: 'left',
+                            ticks: {
+                                callback: function(value) {
+                                    return value.toLocaleString('tr-TR');
+                                }
+                            },
+                            grid: { color: 'rgba(0,0,0,0.05)' }
+                        },
+                        yLines: {
+                            stacked: false,
+                            beginAtZero: true,
+                            position: 'right',
+                            ticks: {
+                                callback: function(value) {
+                                    return value.toLocaleString('tr-TR');
+                                }
+                            },
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+            ctx.canvas.closest('.chart-container')._chart = dailyMarketChart;
+        }
+
+        function formatDataLegendValue(val) {
+            if (val == null) return '-';
+            if (typeof val === 'number') return val.toLocaleString('tr-TR');
+            return String(val);
+        }
+
+        function coerceNumber(v) {
+            if (v == null || v === '') return null;
+            const n = Number(v);
+            return isNaN(n) ? null : n;
+        }
+
+        // Pazar Payı Dağılımı (RN) – 2026/2025/2024/2023/2022; legend’da tek yıl seçili (bir defada bir yıl)
+        function updateMarketShareChart(rawData) {
+            const rows = rawData || [];
+            const labels = [];
+            const rn2026 = [], rn2025 = [], rn2024 = [], rn2023 = [], rn2022 = [];
+            const revenue2026 = [], revenue2025 = [], revenue2024 = [], revenue2023 = [], revenue2022 = [];
+            rows.forEach(row => {
+                const seg = row.SEGMENT || row.segment || row.MAINMARKET || row.mainmarket;
+                if (!seg) return;
+                const r6 = coerceNumber(row.RN_2026 ?? row.rn_2026) || 0;
+                const r5 = coerceNumber(row.RN_2025 ?? row.rn_2025) || 0;
+                const r4 = coerceNumber(row.RN_2024 ?? row.rn_2024) || 0;
+                const r3 = coerceNumber(row.RN_2023 ?? row.rn_2023) || 0;
+                const r2 = coerceNumber(row.RN_2022 ?? row.rn_2022) || 0;
+                if (r6 + r5 + r4 + r3 + r2 <= 0) return;
+                labels.push(seg);
+                rn2026.push(r6); rn2025.push(r5); rn2024.push(r4); rn2023.push(r3); rn2022.push(r2);
+                revenue2026.push(coerceNumber(row.REVENUE_2026 ?? row.revenue_2026) || 0);
+                revenue2025.push(coerceNumber(row.REVENUE_2025 ?? row.revenue_2025) || 0);
+                revenue2024.push(coerceNumber(row.REVENUE_2024 ?? row.revenue_2024) || 0);
+                revenue2023.push(coerceNumber(row.REVENUE_2023 ?? row.revenue_2023) || 0);
+                revenue2022.push(coerceNumber(row.REVENUE_2022 ?? row.revenue_2022) || 0);
+            });
+            // Küçükten büyüğe sırala (2026 RN’e göre)
+            const indices = labels.map((_, i) => i).sort((a, b) => (rn2026[a] || 0) - (rn2026[b] || 0));
+            const reorder = (arr) => indices.map(i => arr[i]);
+            const labelsSorted = reorder(labels);
+            const rn2026s = reorder(rn2026), rn2025s = reorder(rn2025), rn2024s = reorder(rn2024), rn2023s = reorder(rn2023), rn2022s = reorder(rn2022);
+            const revenue2026s = reorder(revenue2026), revenue2025s = reorder(revenue2025), revenue2024s = reorder(revenue2024), revenue2023s = reorder(revenue2023), revenue2022s = reorder(revenue2022);
+            const totals = [
+                rn2026s.reduce((s, v) => s + v, 0),
+                rn2025s.reduce((s, v) => s + v, 0),
+                rn2024s.reduce((s, v) => s + v, 0),
+                rn2023s.reduce((s, v) => s + v, 0),
+                rn2022s.reduce((s, v) => s + v, 0)
+            ];
+            const revTotals = [
+                revenue2026s.reduce((s, v) => s + v, 0),
+                revenue2025s.reduce((s, v) => s + v, 0),
+                revenue2024s.reduce((s, v) => s + v, 0),
+                revenue2023s.reduce((s, v) => s + v, 0),
+                revenue2022s.reduce((s, v) => s + v, 0)
+            ];
+            const revenueByYear = [revenue2026s, revenue2025s, revenue2024s, revenue2023s, revenue2022s];
+            const yearLabels = ['2026', '2025', '2024', '2023', '2022'];
+            const bgColors = labelsSorted.map((_, i) => colors.markets[i % colors.markets.length]);
+
+            const ctx = document.getElementById('marketShareChart').getContext('2d');
+            if (marketShareChart) {
+                marketShareChart.destroy();
+                marketShareChart = null;
+            }
+            marketShareChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labelsSorted,
+                    datasets: yearLabels.map((label, idx) => ({
+                        label: label,
+                        data: [rn2026s, rn2025s, rn2024s, rn2023s, rn2022s][idx],
+                        backgroundColor: bgColors,
+                        borderColor: '#ffffff',
+                        borderWidth: 2,
+                        hoverOffset: 4,
+                        hidden: idx !== 0
+                    }))
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    cutout: '40%',
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                font: { size: 11 },
+                                generateLabels: function(chart) {
+                                    return (chart.data.datasets || []).map(function(ds, i) {
+                                        var meta = chart.getDatasetMeta && chart.getDatasetMeta(i);
+                                        var isHidden = meta ? meta.hidden : ds.hidden;
+                                        return {
+                                            text: ds.label || ('Yıl ' + (i + 1)),
+                                            fillStyle: (ds.backgroundColor && ds.backgroundColor[0]) ? ds.backgroundColor[0] : 'gray',
+                                            strokeStyle: '#fff',
+                                            lineWidth: 2,
+                                            hidden: isHidden,
+                                            index: i,
+                                            datasetIndex: i
+                                        };
+                                    });
+                                }
+                            },
+                            onClick: function(e, legendItem, legend) {
+                                const idx = legendItem.datasetIndex !== undefined ? legendItem.datasetIndex : legendItem.index;
+                                const chart = legend.chart;
+                                if (idx == null || idx < 0) return false;
+                                chart.data.datasets.forEach(function(ds, i) { ds.hidden = i !== idx; });
+                                chart.update();
+                                return false;
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const dataIndex = context.dataIndex;
+                                    const datasetIndex = context.datasetIndex;
+                                    const totalRn = totals[datasetIndex];
+                                    const val = context.parsed;
+                                    const pct = totalRn ? (val / totalRn) * 100 : 0;
+                                    const rev = revenueByYear[datasetIndex][dataIndex] || 0;
+                                    return `${context.label}: ${val.toLocaleString('tr-TR')} RN · €${rev.toLocaleString('tr-TR')} (${pct.toFixed(1)}%)`;
+                                }
+                            }
+                        },
+                        datalabels: {
+                            formatter: (value, ctx) => {
+                                const i = ctx.dataIndex;
+                                const dsIdx = ctx.datasetIndex;
+                                const name = labelsSorted[i] || '';
+                                const rev = revenueByYear[dsIdx][i] || 0;
+                                const totalRn = totals[dsIdx];
+                                const totalRev = revTotals[dsIdx];
+                                const pctRn = totalRn ? (value / totalRn) * 100 : 0;
+                                const pctRev = totalRev ? (rev / totalRev) * 100 : 0;
+                                const rnStr = value != null ? value.toLocaleString('tr-TR') + ' RN (' + pctRn.toFixed(1) + '%)' : '';
+                                const euroStr = '€' + rev.toLocaleString('tr-TR') + ' (' + pctRev.toFixed(1) + '%)';
+                                return [name, rnStr, euroStr].filter(Boolean);
+                            },
+                            color: '#ffffff',
+                            font: { weight: 'bold', size: 10 },
+                            padding: 2,
+                            align: 'center',
+                            anchor: 'center'
+                        }
+                    }
+                }
+            });
+            ctx.canvas.closest('.chart-container')._chart = marketShareChart;
+        }
+
+        // Ana Pazar Gelir Dağılımı (2026, 2025, 2024, 2023, 2022) – line; varsayılan 2026+2025, 2024/2023/2022 gizli
+        function updateRevenueMainmarketChart(rawData) {
+            const rows = rawData || [];
+            const labels = [];
+            const rev2026 = [];
+            const rev2025 = [];
+            const rev2024 = [];
+            const rev2023 = [];
+            const rev2022 = [];
+            rows.forEach(row => {
+                const seg = row.SEGMENT || row.segment || row.MAINMARKET || row.mainmarket;
+                if (!seg) return;
+                labels.push(seg);
+                rev2026.push(coerceNumber(row.REVENUE_2026 ?? row.revenue_2026) || 0);
+                rev2025.push(coerceNumber(row.REVENUE_2025 ?? row.revenue_2025) || 0);
+                rev2024.push(coerceNumber(row.REVENUE_2024 ?? row.revenue_2024) || 0);
+                rev2023.push(coerceNumber(row.REVENUE_2023 ?? row.revenue_2023) || 0);
+                rev2022.push(coerceNumber(row.REVENUE_2022 ?? row.revenue_2022) || 0);
+            });
+
+            const ctx = document.getElementById('revenueMainmarketChart').getContext('2d');
+            if (revenueMainmarketChart) {
+                revenueMainmarketChart.destroy();
+                revenueMainmarketChart = null;
+            }
+            revenueMainmarketChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: '2026',
+                            data: rev2026,
+                            borderColor: colors.primary,
+                            backgroundColor: 'rgba(102, 126, 234, 0.25)',
+                            borderWidth: 3,
+                            tension: 0.3,
+                            pointRadius: 4,
+                            pointHoverRadius: 6,
+                            fill: true
+                        },
+                        {
+                            label: '2025',
+                            data: rev2025,
+                            borderColor: 'rgba(148, 163, 184, 0.9)',
+                            backgroundColor: 'rgba(148, 163, 184, 0.2)',
+                            borderWidth: 2,
+                            tension: 0.3,
+                            pointRadius: 3,
+                            pointHoverRadius: 5,
+                            fill: true
+                        },
+                        {
+                            label: '2024',
+                            data: rev2024,
+                            borderColor: 'rgba(34, 197, 94, 0.9)',
+                            backgroundColor: 'rgba(34, 197, 94, 0.15)',
+                            borderWidth: 2,
+                            tension: 0.3,
+                            pointRadius: 3,
+                            pointHoverRadius: 5,
+                            fill: true,
+                            hidden: true
+                        },
+                        {
+                            label: '2023',
+                            data: rev2023,
+                            borderColor: 'rgba(234, 88, 12, 0.9)',
+                            backgroundColor: 'rgba(234, 88, 12, 0.15)',
+                            borderWidth: 2,
+                            tension: 0.3,
+                            pointRadius: 3,
+                            pointHoverRadius: 5,
+                            fill: true,
+                            hidden: true
+                        },
+                        {
+                            label: '2022',
+                            data: rev2022,
+                            borderColor: 'rgba(139, 92, 246, 0.9)',
+                            backgroundColor: 'rgba(139, 92, 246, 0.15)',
+                            borderWidth: 2,
+                            tension: 0.3,
+                            pointRadius: 3,
+                            pointHoverRadius: 5,
+                            fill: true,
+                            hidden: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: { usePointStyle: true, font: { size: 11 } }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: function(context) {
+                                    const val = context.parsed.y || 0;
+                                    return `${context.dataset.label}: €${val.toLocaleString('tr-TR')}`;
+                                }
+                            }
+                        },
+                        datalabels: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '€' + Number(value).toLocaleString('tr-TR', { maximumFractionDigits: 0 });
+                                }
+                            },
+                            grid: { color: 'rgba(0,0,0,0.05)' }
+                        },
+                        x: { grid: { display: false } }
+                    }
+                }
+            });
+            ctx.canvas.closest('.chart-container')._chart = revenueMainmarketChart;
+        }
+
+        function toggleChartDataLegend(container) {
+            const chart = container._chart;
+            if (!chart || !chart.data) return;
+            const legendEl = container.querySelector('.chart-data-legend');
+            if (!legendEl) return;
+            const isAvgRateChart = chart.canvas && chart.canvas.id === 'avgRateChart';
+            const isRnChart = chart.canvas && chart.canvas.id === 'rnChart';
+            const labels = chart.data.labels || [];
+            const datasets = chart.data.datasets || [];
+            let html = '<table><thead><tr><th>Etiket</th>';
+            datasets.forEach(function(ds) {
+                html += '<th>' + (ds.label || '') + '</th>';
+            });
+            if ((isAvgRateChart || isRnChart) && datasets.length >= 2) {
+                html += '<th>2025&#39;e Göre Değişim (%)</th>';
+            }
+            html += '</tr></thead><tbody>';
+            const maxLen = Math.max(labels.length, datasets.length ? Math.max.apply(null, datasets.map(function(d) { return (d.data || []).length; })) : 0);
+            for (var i = 0; i < maxLen; i++) {
+                html += '<tr><td>' + (labels[i] !== undefined && labels[i] !== null ? labels[i] : '-') + '</td>';
+                datasets.forEach(function(ds) {
+                    var v = (ds.data || [])[i];
+                    html += '<td>' + formatDataLegendValue(v) + '</td>';
+                });
+                if ((isAvgRateChart || isRnChart) && datasets.length >= 2) {
+                    var v2026 = (datasets[0].data || [])[i];
+                    var v2025 = (datasets[1].data || [])[i];
+                    var diffCell = '-';
+                    if (typeof v2026 === 'number' && typeof v2025 === 'number' && v2025 !== 0) {
+                        var diffPct = ((v2026 - v2025) / v2025) * 100;
+                        var sign = diffPct > 0 ? '+' : '';
+                        diffCell = sign + diffPct.toFixed(1) + ' %';
+                    }
+                    html += '<td>' + diffCell + '</td>';
+                }
+                html += '</tr>';
+            }
+            html += '</tbody></table>';
+            legendEl.innerHTML = html;
+            legendEl.classList.toggle('visible');
+        }
+
+        document.getElementById('dashboardContent').addEventListener('click', function(e) {
+            var sortOpt = e.target.closest('.agent-sort-opt');
+            if (sortOpt) {
+                var sortYear = sortOpt.getAttribute('data-sort');
+                if (!sortYear || !lastAgentPerfRaw) return;
+                document.querySelectorAll('#agentPerformanceContainer .agent-sort-opt').forEach(function(el) { el.classList.remove('active'); });
+                sortOpt.classList.add('active');
+                updateAgentPerformanceChart(lastAgentPerfRaw, sortYear);
+                return;
+            }
+            var h2 = e.target.closest('.chart-container h2');
+            if (!h2) return;
+            var container = h2.closest('.chart-container');
+            if (!container) return;
+            toggleChartDataLegend(container);
+        });
+
+        function showError(message) {
+            document.getElementById('loadingIndicator').style.display = 'none';
+            const errorContainer = document.getElementById('errorContainer');
+            errorContainer.innerHTML = `<div class="error">❌ ${message}<br><small>Server çalışıyor mu? (http://localhost:3001)</small></div>`;
+            errorContainer.style.display = 'block';
+        }
+
+        function showLoginScreen() {
+            document.getElementById('loginScreen').style.display = 'flex';
+            document.getElementById('appScreen').style.display = 'none';
+        }
+        function showAppScreen(displayName) {
+            document.getElementById('displayName').textContent = displayName ? 'Merhaba, ' + displayName : '—';
+            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('appScreen').style.display = 'block';
+        }
+
+        // Login state (localStorage'da tut)
+        let currentUser = null;
+        
+        async function checkAuth() {
+            const storedUser = localStorage.getItem('dashboard_user');
+            if (storedUser) {
+                try {
+                    const user = JSON.parse(storedUser);
+                    showAppScreen(user.display_name);
+                    loadDashboardData(false);
+                    startAutoRefresh();
+                    return;
+                } catch (e) { /* ignore */ }
+            }
+            showLoginScreen();
+        }
+
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const errEl = document.getElementById('loginError');
+            errEl.style.display = 'none';
+            errEl.textContent = '';
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            if (!username || !password) {
+                errEl.textContent = 'Kullanıcı adı ve parola girin.';
+                errEl.style.display = 'block';
+                return;
+            }
+            if (!supabaseClient) {
+                errEl.textContent = 'Supabase bağlantısı yapılandırılmamış.';
+                errEl.style.display = 'block';
+                return;
+            }
+            try {
+                // Supabase'ten kullanıcıyı bul
+                const { data: user, error } = await supabaseClient
+                    .from('users')
+                    .select('id, username, password_hash, display_name, is_active')
+                    .ilike('username', username)
+                    .maybeSingle();
+                if (error || !user || !user.is_active) {
+                    errEl.textContent = 'Kullanıcı bulunamadı veya devre dışı.';
+                    errEl.style.display = 'block';
+                    return;
+                }
+                // Parola kontrolü (bcryptjs client-side)
+                const bcryptLib = window.bcrypt || (typeof bcrypt !== 'undefined' ? bcrypt : null);
+                if (!bcryptLib || typeof bcryptLib.compareSync !== 'function') {
+                    errEl.textContent = 'bcryptjs yüklenemedi. Sayfayı yenileyin veya script engelleyici kapatın.';
+                    errEl.style.display = 'block';
+                    return;
+                }
+                const match = bcryptLib.compareSync(password, user.password_hash);
+                if (!match) {
+                    errEl.textContent = 'Parola hatalı.';
+                    errEl.style.display = 'block';
+                    return;
+                }
+                // Başarılı: kullanıcıyı localStorage'a kaydet
+                currentUser = { id: user.id, username: user.username, display_name: user.display_name || user.username };
+                localStorage.setItem('dashboard_user', JSON.stringify(currentUser));
+                showAppScreen(currentUser.display_name);
+                loadDashboardData(false);
+                startAutoRefresh();
+            } catch (err) {
+                errEl.textContent = 'Giriş hatası: ' + (err.message || 'Bilinmeyen hata');
+                errEl.style.display = 'block';
+            }
+        });
+
+        document.getElementById('btnLogout').addEventListener('click', () => {
+            localStorage.removeItem('dashboard_user');
+            currentUser = null;
+            showLoginScreen();
+        });
+
+        window.addEventListener('load', () => {
+            checkAuth();
+        });
+    </script>
+</body>
+</html>

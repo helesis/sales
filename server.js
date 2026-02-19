@@ -593,9 +593,9 @@ function startPeriodicSync() {
   console.log('>>> Periyodik sync aktif: 30 dakikada bir (09:00-17:00)');
 }
 
-// Dashboard sayfası (login sonrası gösterilecek)
+// Dashboard sayfası (login sonrası gösterilecek) — statik dosyalar public/ içinden
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // Mevcut endpoint
