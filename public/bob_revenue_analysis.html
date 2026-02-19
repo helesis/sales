@@ -493,6 +493,13 @@
         document.querySelectorAll('.metric-tab').forEach(tab => {
             tab.addEventListener('click', () => setMetric(tab.dataset.metric));
         });
+
+        // Iframe içinde ilk yüklemede canvas boyutu 0 olabiliyor; boyut oturduktan sonra grafikleri yeniden çiz
+        setTimeout(function() {
+            if (chartMonthly) chartMonthly.resize();
+            if (chartStacked) chartStacked.resize();
+            if (chartYoY) chartYoY.resize();
+        }, 200);
     }
 
     document.addEventListener('DOMContentLoaded', load);
