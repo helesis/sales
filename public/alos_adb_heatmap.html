@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 <head>
     <meta charset="UTF-8" />
     <title>ALOS & ADB Heatmap</title>
@@ -63,15 +63,15 @@
     <div class="header">
         <div class="title-block">
             <h1>ALOS & ADB Heatmap Analysis</h1>
-            <p>Average Length of Stay (Heat) & Average Daily Budget | 2025 vs 2026</p>
+            <p>ALOS (Length of Stay) & ADB (Average Daily Bed) | 2025 vs 2026</p>
         </div>
         <div class="legend">
             <div class="legend-scale">
-                <span>ALOS (Gün): Düşük (3-5)</span>
+                <span>ALOS (Days): Low (3-5)</span>
                 <div class="legend-bar">
                     <span class="low"></span><span class="mid"></span><span class="high"></span>
                 </div>
-                <span>Yüksek (9+)</span>
+                <span>High (9+)</span>
             </div>
         </div>
     </div>
@@ -98,9 +98,9 @@
 <script>
 (function() {
     const MONTHS = [
-        { key: 'JAN', label: 'Oca' }, { key: 'FEB', label: 'Şub' }, { key: 'MAR', label: 'Mar' }, { key: 'APR', label: 'Nis' },
-        { key: 'MAY', label: 'May' }, { key: 'JUN', label: 'Haz' }, { key: 'JUL', label: 'Tem' }, { key: 'AUG', label: 'Ağu' },
-        { key: 'SEP', label: 'Eyl' }, { key: 'OCT', label: 'Eki' }, { key: 'NOV', label: 'Kas' }, { key: 'DEC', label: 'Ara' }
+        { key: 'JAN', label: 'Jan' }, { key: 'FEB', label: 'Feb' }, { key: 'MAR', label: 'Mar' }, { key: 'APR', label: 'Apr' },
+        { key: 'MAY', label: 'May' }, { key: 'JUN', label: 'Jun' }, { key: 'JUL', label: 'Jul' }, { key: 'AUG', label: 'Aug' },
+        { key: 'SEP', label: 'Sep' }, { key: 'OCT', label: 'Oct' }, { key: 'NOV', label: 'Nov' }, { key: 'DEC', label: 'Dec' }
     ];
 
     function parseCell(value) {
@@ -185,11 +185,11 @@
     function showTooltip(market, monthLabel, data2026, data2025, x, y) {
         let html = '<h3>' + market + ' · ' + monthLabel + '</h3>';
         if (data2026) {
-            html += '<div class="row"><span class="label">2026 ALOS</span><span class="value">' + data2026.alos + ' gün</span></div>';
+            html += '<div class="row"><span class="label">2026 ALOS</span><span class="value">' + data2026.alos + ' days</span></div>';
             html += '<div class="row"><span class="label">2026 ADB</span><span class="value">' + formatADB(data2026.adb) + '</span></div>';
         }
         if (data2025) {
-            html += '<div class="row"><span class="label">2025 ALOS</span><span class="value">' + data2025.alos + ' gün</span></div>';
+            html += '<div class="row"><span class="label">2025 ALOS</span><span class="value">' + data2025.alos + ' days</span></div>';
             html += '<div class="row"><span class="label">2025 ADB</span><span class="value">' + formatADB(data2025.adb) + '</span></div>';
         }
         if (data2026 && data2025) {
@@ -198,12 +198,12 @@
             if (alosCh != null) {
                 const cls = alosCh >= 0 ? 'change-up' : 'change-down';
                 const arrow = alosCh >= 0 ? '▲' : '▼';
-                html += '<div class="row"><span class="label">ALOS Değişim</span><span class="' + cls + '">' + arrow + ' ' + (alosCh >= 0 ? '+' : '') + alosCh.toFixed(1) + '%</span></div>';
+                html += '<div class="row"><span class="label">ALOS Change</span><span class="' + cls + '">' + arrow + ' ' + (alosCh >= 0 ? '+' : '') + alosCh.toFixed(1) + '%</span></div>';
             }
             if (adbCh != null) {
                 const cls = adbCh >= 0 ? 'change-up' : 'change-down';
                 const arrow = adbCh >= 0 ? '▲' : '▼';
-                html += '<div class="row"><span class="label">ADB Değişim</span><span class="' + cls + '">' + arrow + ' ' + (adbCh >= 0 ? '+' : '') + adbCh.toFixed(1) + '%</span></div>';
+                html += '<div class="row"><span class="label">ADB Change</span><span class="' + cls + '">' + arrow + ' ' + (adbCh >= 0 ? '+' : '') + adbCh.toFixed(1) + '%</span></div>';
             }
         }
         tooltipEl.innerHTML = html;
@@ -246,18 +246,18 @@
                 rows = (res.data && Array.isArray(res.data.data)) ? res.data.data : [];
             }
             if (rows.length === 0) {
-                tbodyPazar.innerHTML = '<tr><td style="text-align:center;padding:20px;color:#64748b;">Veri yok veya Supabase bağlantısı yok.</td></tr>';
+                tbodyPazar.innerHTML = '<tr><td style="text-align:center;padding:20px;color:#64748b;">No data or Supabase connection.</td></tr>';
                 tbodyData.innerHTML = '';
                 return;
             }
         } catch (e) {
-            tbodyPazar.innerHTML = '<tr><td style="text-align:center;padding:20px;color:#64748b;">Veri yüklenemedi: ' + e.message + '</td></tr>';
+            tbodyPazar.innerHTML = '<tr><td style="text-align:center;padding:20px;color:#64748b;">Failed to load data: ' + e.message + '</td></tr>';
             tbodyData.innerHTML = '';
             return;
         }
 
         var trPazar = document.createElement('tr');
-        trPazar.innerHTML = '<th>Pazar</th>';
+        trPazar.innerHTML = '<th>Market</th>';
         theadPazar.appendChild(trPazar);
 
         var trData = document.createElement('tr');

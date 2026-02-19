@@ -2,7 +2,7 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8" />
-    <title>RN Dağılım Heatmap 2026</title>
+    <title>RN Heatmap 2026</title>
     <style>
         * {
             box-sizing: border-box;
@@ -340,23 +340,23 @@
 <div class="page">
     <div class="header">
         <div class="title-block">
-            <h1>RN Dağılım Heatmap · 2026 Mart–Kasım</h1>
+            <h1>RN Heatmap · 2026 Mar–Nov</h1>
             <p>
-                Pazar × Oda Tipi kırılımında aylık Room Nights, ADB ve doluluk oranı.
-                Her hücre: RN · Ortalama Fiyat · Doluluk Progress Bar.
+                Market × Room Type: monthly Room Nights, ADB and occupancy.
+                Each cell: RN · ADR · Occupancy progress bar.
             </p>
         </div>
         <div class="legend">
             <div class="badge">
                 <span class="badge-dot"></span>
-                <span>Doluluk &amp; RN yoğunluğu</span>
+                <span>Occupancy &amp; RN intensity</span>
             </div>
             <div class="legend-scale">
-                <span>Düşük RN</span>
+                <span>Low RN</span>
                 <div class="legend-bar">
                     <span class="low"></span><span class="mid"></span><span class="high"></span>
                 </div>
-                <span>Yüksek RN</span>
+                <span>High RN</span>
             </div>
         </div>
     </div>
@@ -364,10 +364,10 @@
     <div class="heatmap-container">
         <div class="heatmap-header">
             <div class="subtitle">
-                508 yatak kapasiteli tesis varsayımıyla: Doluluk = RN / (Kapasite × Ay Gün Sayısı)
+                508 rooms assumed: Occupancy = RN / (Capacity × Days in Month)
             </div>
             <div class="subtitle">
-                Turuncu satırlar: ay bazlı <strong>GENEL TOPLAM</strong> · Kırmızı satır: 9 aylık <strong>YILLIK TOPLAM</strong>
+                Orange rows: monthly <strong>TOTAL</strong> · Red row: 9‑month <strong>ANNUAL TOTAL</strong>
             </div>
         </div>
         <div class="heatmap-scroll">
@@ -384,13 +384,13 @@
 <script>
     // === Konfigürasyon ve Örnek Veri ===
     const ROOM_TYPES = [
-        { id: 'BUNGALOV', label: 'BUNGALOV (236 oda)', capacity: 236 },
-        { id: 'STANDART_LAND_VIEW', label: 'STANDART LAND VIEW (57 oda)', capacity: 57 },
-        { id: 'STANDART_SEA_VIEW', label: 'STANDART SEA VIEW (70 oda)', capacity: 70 },
-        { id: 'BUNGALOV_AILE_ODASI', label: 'BUNGALOV AİLE ODASI (133 oda)', capacity: 133 },
-        { id: 'STANDART_FAMILY_ROOM', label: 'STANDART FAMILY ROOM (8 oda)', capacity: 8 },
-        { id: 'SUITE', label: 'SUITE (4 oda)', capacity: 4 },
-        { id: 'TUM_ODALAR', label: 'TOPLAM (508 oda)', capacity: 508 }
+        { id: 'BUNGALOV', label: 'BUNGALOV (236 rooms)', capacity: 236 },
+        { id: 'STANDART_LAND_VIEW', label: 'STANDARD LAND VIEW (57 rooms)', capacity: 57 },
+        { id: 'STANDART_SEA_VIEW', label: 'STANDARD SEA VIEW (70 rooms)', capacity: 70 },
+        { id: 'BUNGALOV_AILE_ODASI', label: 'BUNGALOV FAMILY (133 rooms)', capacity: 133 },
+        { id: 'STANDART_FAMILY_ROOM', label: 'STANDARD FAMILY ROOM (8 rooms)', capacity: 8 },
+        { id: 'SUITE', label: 'SUITE (4 rooms)', capacity: 4 },
+        { id: 'TUM_ODALAR', label: 'TOTAL (508 rooms)', capacity: 508 }
     ];
 
     // API room_type zaten BUNGALOV, STANDART_LAND_VIEW, ... TUM_ODALAR dönüyor; mapping sadece fallback
@@ -544,12 +544,12 @@
         const tr = document.createElement('tr');
 
         const thMarket = document.createElement('th');
-        thMarket.textContent = 'Pazar / Toplam';
+        thMarket.textContent = 'Market / Total';
         thMarket.className = 'sticky-col-1';
         tr.appendChild(thMarket);
 
         const thRoom = document.createElement('th');
-        thRoom.textContent = 'Oda Tipi (Kapasite)';
+        thRoom.textContent = 'Room Type (Capacity)';
         thRoom.className = 'sticky-col-2';
         tr.appendChild(thRoom);
 
@@ -585,7 +585,7 @@
                 // Pazar
                 const tdMarket = document.createElement('td');
                 tdMarket.className = 'sticky-col-1 row-market-label';
-                tdMarket.textContent = market;
+                tdMarket.textContent = market === 'GENEL TOPLAM' ? 'TOTAL' : market;
                 tr.appendChild(tdMarket);
 
                 // Oda tipi
@@ -685,9 +685,9 @@
         const yearOcc = THEORETICAL_MAX_RN ? (totalRn / THEORETICAL_MAX_RN) * 100 : 0;
 
         tdYear.innerHTML = `
-            2026 Mart–Kasım YILLIK TOPLAM · 
+            2026 Mar–Nov ANNUAL TOTAL · 
             Toplam Gerçek RN: <strong>${formatNumber(totalRn)}</strong> ·
-            Yıllık Teorik Maks RN: <strong>${formatNumber(THEORETICAL_MAX_RN)}</strong>
+            Annual Theoretical Max RN: <strong>${formatNumber(THEORETICAL_MAX_RN)}</strong>
             (508 oda × 233 gece) ·
             Ortalama Doluluk: <strong>${formatPercent(yearOcc)}</strong>
         `;
@@ -724,7 +724,7 @@
             tooltip.innerHTML = `
                 <h3>${market} · ${roomType}</h3>
                 <div class="row">
-                    <span class="label">Ay</span>
+                    <span class="label">Month</span>
                     <span class="value">${monthLabel}</span>
                 </div>
                 <div class="row">
@@ -732,19 +732,19 @@
                     <span class="value">${formatNumber(rn)}</span>
                 </div>
                 <div class="row">
-                    <span class="label">Kapasite</span>
-                    <span class="value">${cap} oda × ${days} gün = ${formatNumber(cap * days)} RN</span>
+                    <span class="label">Capacity</span>
+                    <span class="value">${cap} rooms × ${days} days = ${formatNumber(cap * days)} RN</span>
                 </div>
                 <div class="row">
-                    <span class="label">Doluluk</span>
+                    <span class="label">Occupancy</span>
                     <span class="value">${formatPercent(occ)}</span>
                 </div>
                 <div class="row">
-                    <span class="label">Ortalama Fiyat</span>
+                    <span class="label">ADR</span>
                     <span class="value">${formatCurrency(price)}</span>
                 </div>
                 <div class="row">
-                    <span class="label">Tahmini Gelir</span>
+                    <span class="label">Est. Revenue</span>
                     <span class="value">${formatCurrency(rev)}</span>
                 </div>
             `;

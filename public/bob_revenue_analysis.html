@@ -6,6 +6,7 @@
     <title>BOB Revenue Analysis — 5 Year</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="vendor/chart.umd.min.js"></script>
+    <script src="vendor/chartjs-plugin-datalabels.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -153,6 +154,7 @@
 
 <script>
 (function() {
+    if (typeof ChartDataLabels !== 'undefined') Chart.register(ChartDataLabels);
     const SUPABASE_URL = 'https://gvapdwdxikctalydaoak.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd2YXBkd2R4aWtjdGFseWRhb2FrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyNDY0MDIsImV4cCI6MjA4NjgyMjQwMn0.35f3j7MUDBzXWKxyZp4oiX-koRWW0AlufqrC61jM7xE';
     let supabaseClient = null;
@@ -379,7 +381,22 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
+                    plugins: {
+                        legend: { display: false },
+                        datalabels: {
+                            display: true,
+                            anchor: 'end',
+                            align: 'top',
+                            color: '#1e293b',
+                            font: { size: 10 },
+                            formatter: function(value) {
+                                if (value == null || value === 0) return '';
+                                if (currentMetric === 'revenue') return '€' + (value >= 1000 ? (value/1000).toFixed(1) + 'k' : Math.round(value));
+                                if (currentMetric === 'adb') return '€' + Math.round(value);
+                                return value;
+                            }
+                        }
+                    },
                     scales: {
                         x: { stacked: true, grid: { display: false } },
                         y: { stacked: true, beginAtZero: true }
@@ -407,7 +424,20 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { display: true } },
+                    plugins: {
+                        legend: { display: true },
+                        datalabels: {
+                            display: true,
+                            anchor: 'end',
+                            align: 'top',
+                            color: '#1e293b',
+                            font: { size: 10 },
+                            formatter: function(value) {
+                                if (value == null) return '';
+                                return (value >= 0 ? '+' : '') + value.toFixed(1) + '%';
+                            }
+                        }
+                    },
                     scales: {
                         x: { grid: { display: false } },
                         y: { beginAtZero: false, title: { display: true, text: 'YoY %' } }
@@ -494,7 +524,7 @@
             tab.addEventListener('click', () => setMetric(tab.dataset.metric));
         });
 
-        // Iframe içinde ilk yüklemede canvas boyutu 0 olabiliyor; boyut oturduktan sonra grafikleri yeniden çiz
+        // In iframe, canvas can be 0 on first load; redraw charts once size is set
         setTimeout(function() {
             if (chartMonthly) chartMonthly.resize();
             if (chartStacked) chartStacked.resize();
