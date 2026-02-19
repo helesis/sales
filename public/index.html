@@ -424,7 +424,7 @@
         </div>
 
         <div id="loadingIndicator" class="loading">
-            📊 Veriler yükleniyor...
+            📊 Loading data...
         </div>
 
         <div id="errorContainer" style="display: none;"></div>
@@ -1587,7 +1587,7 @@
                         },
                         tooltip: {
                             mode: 'index',
-                            intersect: false,
+                            intersect: true,
                             backgroundColor: 'rgba(0,0,0,0.8)',
                             padding: 12,
                             callbacks: {
@@ -1989,7 +1989,7 @@
                                         var meta = chart.getDatasetMeta && chart.getDatasetMeta(i);
                                         var isHidden = meta ? meta.hidden : ds.hidden;
                                         return {
-                                            text: ds.label || ('Yıl ' + (i + 1)),
+                                            text: ds.label || ('Year ' + (i + 1)),
                                             fillStyle: (ds.backgroundColor && ds.backgroundColor[0]) ? ds.backgroundColor[0] : 'gray',
                                             strokeStyle: '#fff',
                                             lineWidth: 2,

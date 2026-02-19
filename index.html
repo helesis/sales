@@ -402,11 +402,11 @@
             <p class="subtitle">Booking Dashboard 2026</p>
             <div id="loginError" class="login-error"></div>
             <form id="loginForm">
-                <label for="loginUsername">Kullanıcı adı</label>
-                <input type="text" id="loginUsername" name="username" autocomplete="username" required placeholder="Kullanıcı adınız">
-                <label for="loginPassword">Parola</label>
-                <input type="password" id="loginPassword" name="password" autocomplete="current-password" required placeholder="Parolanız">
-                <button type="submit">Giriş yap</button>
+                <label for="loginUsername">Username</label>
+                <input type="text" id="loginUsername" name="username" autocomplete="username" required placeholder="Your username">
+                <label for="loginPassword">Password</label>
+                <input type="password" id="loginPassword" name="password" autocomplete="current-password" required placeholder="Your password">
+                <button type="submit">Log in</button>
             </form>
         </div>
     </div>
@@ -418,13 +418,13 @@
             <p>Booking Dashboard 2026 - <span id="currentDate"></span></p>
             <div class="header-user">
                 <span class="display-name" id="displayName">—</span>
-                <button type="button" class="btn-logout" id="btnLogout">Çıkış</button>
+                <button type="button" class="btn-logout" id="btnLogout">Log out</button>
             </div>
-            <p class="last-update">Son güncelleme: <span id="lastUpdateTime">—</span></p>
+            <p class="last-update">Last update: <span id="lastUpdateTime">—</span></p>
         </div>
 
         <div id="loadingIndicator" class="loading">
-            📊 Veriler yükleniyor...
+            📊 Loading data...
         </div>
 
         <div id="errorContainer" style="display: none;"></div>
@@ -434,36 +434,36 @@
             <div class="metrics-grid">
                 <div class="metric-card">
                     <div class="icon">📋</div>
-                    <div class="label">Bugün Oluşturulan Rezervasyon</div>
+                    <div class="label">Reservations Created Today</div>
                     <div class="value" id="todayReservations">-</div>
-                    <div class="subtext">Adet</div>
+                    <div class="subtext">Count</div>
                 </div>
 
                 <div class="metric-card">
                     <div class="icon">🛏️</div>
-                    <div class="label">Bugün Oluşturulan Room Nights</div>
+                    <div class="label">Room Nights Created Today</div>
                     <div class="value" id="todayRN">-</div>
-                    <div class="subtext">Oda Gecesi</div>
+                    <div class="subtext">Room Nights</div>
                 </div>
 
                 <div class="metric-card">
                     <div class="icon">💰</div>
-                    <div class="label">Bugün Oluşturulan Gelir</div>
+                    <div class="label">Revenue Created Today</div>
                     <div class="value" id="todayRevenue">-</div>
                     <div class="subtext">EUR</div>
                 </div>
 
                 <div class="metric-card gauge-card">
                     <div class="icon">🎯</div>
-                    <div class="label">Yıllık Gelir Hedefi</div>
+                    <div class="label">Annual Revenue Target</div>
                     <div class="value" id="annualTargetValue">-</div>
-                    <div class="subtext">Tamamlandı</div>
+                    <div class="subtext">Completed</div>
                     <div class="radial-progress" id="annualRadial"></div>
                     <div id="annualTargetBadge" class="gauge-badge">-</div>
                     <div class="gauge-stats">
-                        <div id="annualStatsActual">💰 Gerçekleşen: -</div>
-                        <div id="annualStatsTarget">🎯 Hedef: €50.000.000</div>
-                        <div id="annualStatsRemaining">📈 Kalan: -</div>
+                        <div id="annualStatsActual">💰 Actual: -</div>
+                        <div id="annualStatsTarget">🎯 Target: €50.000.000</div>
+                        <div id="annualStatsRemaining">📈 Remaining: -</div>
                     </div>
                 </div>
             </div>
@@ -471,62 +471,62 @@
             <!-- Grafikler: satırda 2'şer; sıra: 1–9 grid, 10–11 tam genişlik -->
             <div class="charts-grid">
                 <div class="chart-container">
-                    <h2>🛏️ Bugün Girilen Rezervasyonlar – 2026 Aylarına Göre Room Nights</h2>
+                    <h2>🛏️ Reservations Created Today – Room Nights by Month 2026</h2>
                     <canvas id="todayRnByMonthChart"></canvas>
                     <div class="chart-data-legend"></div>
                 </div>
                 <div class="chart-container">
-                    <h2>📋 Bugün Girilen – Acente Bazlı RN & Gelir</h2>
+                    <h2>📋 Created Today – Agent RN & Revenue</h2>
                     <canvas id="todayAgentChart"></canvas>
                     <div class="chart-data-legend"></div>
                 </div>
                 <div class="chart-container">
-                    <h2>📈 2026 Booking Pace - Son 15 & 30 Gün</h2>
+                    <h2>📈 2026 Booking Pace – Last 15 & 30 Days</h2>
                     <canvas id="bookingPaceChart"></canvas>
                     <div class="chart-data-legend"></div>
                 </div>
                 <div class="chart-container">
-                    <h2>🧩 Pazar Payı Dağılımı (RN) – Yıl Seçin</h2>
+                    <h2>🧩 Market Share (RN) – Select Year</h2>
                     <canvas id="marketShareChart"></canvas>
                     <div class="chart-data-legend"></div>
                 </div>
                 <div class="chart-container">
-                    <h2>📊 2026 Aylık Room Nights (OTB)</h2>
+                    <h2>📊 2026 Monthly Room Nights (OTB)</h2>
                     <canvas id="rnChart"></canvas>
                     <div class="chart-data-legend"></div>
                 </div>
                 <div class="chart-container">
-                    <h2>💹 Ana Pazar Gelir Dağılımı (2025 / 2026)</h2>
+                    <h2>💹 Main Market Revenue (2025 / 2026)</h2>
                     <canvas id="revenueMainmarketChart"></canvas>
                     <div class="chart-data-legend"></div>
                 </div>
                 <div class="chart-container">
-                    <h2>💵 2026 Aylık Toplam Gelir (OTB)</h2>
+                    <h2>💵 2026 Monthly Total Revenue (OTB)</h2>
                     <canvas id="revenueChart"></canvas>
                     <div class="chart-data-legend"></div>
                 </div>
                 <div class="chart-container">
-                    <h2>📈 2026 Aylık Average Rate (OTB)</h2>
+                    <h2>📈 2026 Monthly Average Rate (OTB)</h2>
                     <canvas id="avgRateChart"></canvas>
                     <div class="chart-data-legend"></div>
                 </div>
                 <div class="chart-container chart-container-agent-perf chart-container-full" id="agentPerformanceContainer">
-                    <h2>📊 Acente Performansı</h2>
+                    <h2>📊 Agent Performance</h2>
                     <div class="agent-perf-sort-legend">
-                        <span class="agent-sort-opt active" data-sort="2026" title="Acenteleri 2026 gelirine göre sırala">2026'ye göre sırala</span>
-                        <span class="agent-sort-opt" data-sort="2025" title="Acenteleri 2025 gelirine göre sırala">2025'e göre sırala</span>
+                        <span class="agent-sort-opt active" data-sort="2026" title="Sort agents by 2026 revenue">Sort by 2026</span>
+                        <span class="agent-sort-opt" data-sort="2025" title="Sort agents by 2025 revenue">Sort by 2025</span>
                     </div>
                     <canvas id="agentPerformanceChart"></canvas>
                     <div class="chart-data-legend"></div>
                 </div>
             </div>
             <div class="chart-container chart-container-full">
-                <h2>📅 2026 Günlük Doluluk - Pazar Bazlı (OTB)</h2>
+                <h2>📅 2026 Daily Occupancy – by Market (OTB)</h2>
                 <canvas id="dailyMarketChart"></canvas>
                 <div class="chart-data-legend"></div>
             </div>
             <div class="chart-container chart-container-full">
-                <h2>🔥 2026 RN Dağılım Heatmap (Mart–Kasım)</h2>
+                <h2>🔥 2026 RN Heatmap (Mar–Nov)</h2>
                 <iframe src="rn_heatmap.html"
                         style="width: 100%; height: 820px; border: none; border-radius: 16px; overflow: hidden; background: transparent;">
                 </iframe>
@@ -769,9 +769,9 @@
             const actualRow = document.getElementById('annualStatsActual');
             const targetRow = document.getElementById('annualStatsTarget');
             const remainingRow = document.getElementById('annualStatsRemaining');
-            if (actualRow) actualRow.textContent = '💰 Gerçekleşen: €' + actual.toLocaleString('tr-TR');
-            if (targetRow) targetRow.textContent = '🎯 Hedef: €' + target.toLocaleString('tr-TR');
-            if (remainingRow) remainingRow.textContent = '📈 Kalan: €' + remaining.toLocaleString('tr-TR');
+            if (actualRow) actualRow.textContent = '💰 Actual: €' + actual.toLocaleString('tr-TR');
+            if (targetRow) targetRow.textContent = '🎯 Target: €' + target.toLocaleString('tr-TR');
+            if (remainingRow) remainingRow.textContent = '📈 Remaining: €' + remaining.toLocaleString('tr-TR');
 
             // Badge
             const badgeEl = document.getElementById('annualTargetBadge');
@@ -927,7 +927,7 @@
                 }
             } catch (error) {
                 console.error('Veri yükleme hatası:', error);
-                if (!isSilentRefresh) showError('Veri yüklenirken hata oluştu: ' + error.message);
+                if (!isSilentRefresh) showError('Error loading data: ' + error.message);
             }
         }
 
@@ -1603,8 +1603,8 @@
                                         if (stack) byStack[stack] = (byStack[stack] || 0) + (t.parsed.x || 0);
                                     });
                                     var parts = [];
-                                    if (byStack['2026']) parts.push('2026 toplam: €' + byStack['2026'].toLocaleString('tr-TR'));
-                                    if (byStack['2025']) parts.push('2025 toplam: €' + byStack['2025'].toLocaleString('tr-TR'));
+                                    if (byStack['2026']) parts.push('2026 total: €' + byStack['2026'].toLocaleString('tr-TR'));
+                                    if (byStack['2025']) parts.push('2025 total: €' + byStack['2025'].toLocaleString('tr-TR'));
                                     return parts.join('\n');
                                 }
                             }
@@ -1654,7 +1654,7 @@
                     labels: months,
                     datasets: [
                         {
-                            label: 'Son 30 Gün (16–30 gün arası) - 2026',
+                            label: 'Last 30 Days (16–30) - 2026',
                             data: last30_2026,
                             backgroundColor: 'rgba(67, 233, 123, 0.35)',
                             borderColor: 'rgba(67, 233, 123, 1)',
@@ -1665,7 +1665,7 @@
                             hidden: true
                         },
                         {
-                            label: 'Son 15 Gün - 2026',
+                            label: 'Last 15 Days - 2026',
                             data: last15_2026,
                             backgroundColor: 'rgba(250, 112, 154, 0.45)',
                             borderColor: 'rgba(250, 112, 154, 1)',
@@ -1676,7 +1676,7 @@
                         },
                         {
                             type: 'line',
-                            label: 'Son 30 Gün (16–30) - 2025',
+                            label: 'Last 30 Days (16–30) - 2025',
                             data: last30_2025,
                             backgroundColor: 'transparent',
                             borderColor: 'rgba(120, 120, 120, 0.9)',
@@ -1691,7 +1691,7 @@
                         },
                         {
                             type: 'line',
-                            label: 'Son 15 Gün - 2025',
+                            label: 'Last 15 Days - 2025',
                             data: last15_2025,
                             backgroundColor: 'transparent',
                             borderColor: 'rgba(120, 120, 120, 0.9)',
@@ -1989,7 +1989,7 @@
                                         var meta = chart.getDatasetMeta && chart.getDatasetMeta(i);
                                         var isHidden = meta ? meta.hidden : ds.hidden;
                                         return {
-                                            text: ds.label || ('Yıl ' + (i + 1)),
+                                            text: ds.label || ('Year ' + (i + 1)),
                                             fillStyle: (ds.backgroundColor && ds.backgroundColor[0]) ? ds.backgroundColor[0] : 'gray',
                                             strokeStyle: '#fff',
                                             lineWidth: 2,
@@ -2190,7 +2190,7 @@
                 html += '<th>' + (ds.label || '') + '</th>';
             });
             if ((isAvgRateChart || isRnChart) && datasets.length >= 2) {
-                html += '<th>2025&#39;e Göre Değişim (%)</th>';
+                html += '<th>YoY Change (%)</th>';
             }
             html += '</tr></thead><tbody>';
             const maxLen = Math.max(labels.length, datasets.length ? Math.max.apply(null, datasets.map(function(d) { return (d.data || []).length; })) : 0);
@@ -2238,7 +2238,7 @@
         function showError(message) {
             document.getElementById('loadingIndicator').style.display = 'none';
             const errorContainer = document.getElementById('errorContainer');
-            errorContainer.innerHTML = `<div class="error">❌ ${message}<br><small>Server çalışıyor mu? (http://localhost:3001)</small></div>`;
+            errorContainer.innerHTML = `<div class="error">❌ ${message}<br><small>Is the server running? (http://localhost:3001)</small></div>`;
             errorContainer.style.display = 'block';
         }
 
@@ -2247,7 +2247,7 @@
             document.getElementById('appScreen').style.display = 'none';
         }
         function showAppScreen(displayName) {
-            document.getElementById('displayName').textContent = displayName ? 'Merhaba, ' + displayName : '—';
+            document.getElementById('displayName').textContent = displayName ? displayName : '—';
             document.getElementById('loginScreen').style.display = 'none';
             document.getElementById('appScreen').style.display = 'block';
         }
@@ -2277,12 +2277,12 @@
             const username = document.getElementById('loginUsername').value.trim();
             const password = document.getElementById('loginPassword').value;
             if (!username || !password) {
-                errEl.textContent = 'Kullanıcı adı ve parola girin.';
+                errEl.textContent = 'Enter username and password.';
                 errEl.style.display = 'block';
                 return;
             }
             if (!supabaseClient) {
-                errEl.textContent = 'Supabase bağlantısı yapılandırılmamış.';
+                errEl.textContent = 'Supabase not configured.';
                 errEl.style.display = 'block';
                 return;
             }
@@ -2294,20 +2294,20 @@
                     .ilike('username', username)
                     .maybeSingle();
                 if (error || !user || !user.is_active) {
-                    errEl.textContent = 'Kullanıcı bulunamadı veya devre dışı.';
+                    errEl.textContent = 'User not found or inactive.';
                     errEl.style.display = 'block';
                     return;
                 }
                 // Parola kontrolü (bcryptjs client-side)
                 const bcryptLib = window.bcrypt || (typeof bcrypt !== 'undefined' ? bcrypt : null);
                 if (!bcryptLib || typeof bcryptLib.compareSync !== 'function') {
-                    errEl.textContent = 'bcryptjs yüklenemedi. Sayfayı yenileyin veya script engelleyici kapatın.';
+                    errEl.textContent = 'bcryptjs failed to load. Refresh the page or disable script blocker.';
                     errEl.style.display = 'block';
                     return;
                 }
                 const match = bcryptLib.compareSync(password, user.password_hash);
                 if (!match) {
-                    errEl.textContent = 'Parola hatalı.';
+                    errEl.textContent = 'Invalid password.';
                     errEl.style.display = 'block';
                     return;
                 }
@@ -2318,7 +2318,7 @@
                 loadDashboardData(false);
                 startAutoRefresh();
             } catch (err) {
-                errEl.textContent = 'Giriş hatası: ' + (err.message || 'Bilinmeyen hata');
+                errEl.textContent = 'Login error: ' + (err.message || 'Unknown error');
                 errEl.style.display = 'block';
             }
         });

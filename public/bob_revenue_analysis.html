@@ -147,7 +147,7 @@
     </div>
 
     <div class="chart-card">
-        <h3>Year-over-Year Change % — by Market</h3>
+        <h3 id="titleYoY">Year-over-Year Change % — by Market</h3>
         <div class="chart-wrap"><canvas id="chartYoY"></canvas></div>
     </div>
 </div>
@@ -385,15 +385,18 @@
                         legend: { display: false },
                         datalabels: {
                             display: true,
-                            anchor: 'end',
-                            align: 'top',
+                            anchor: 'center',
+                            align: 'center',
                             color: '#1e293b',
                             font: { size: 10 },
-                            formatter: function(value) {
+                            formatter: function(value, context) {
                                 if (value == null || value === 0) return '';
-                                if (currentMetric === 'revenue') return '€' + (value >= 1000 ? (value/1000).toFixed(1) + 'k' : Math.round(value));
-                                if (currentMetric === 'adb') return '€' + Math.round(value);
-                                return value;
+                                const marketName = context.dataset.label || '';
+                                let valStr = '';
+                                if (currentMetric === 'revenue') valStr = '€' + (value >= 1000 ? (value/1000).toFixed(1) + 'k' : Math.round(value));
+                                else if (currentMetric === 'adb') valStr = '€' + Math.round(value);
+                                else valStr = String(value);
+                                return marketName + '\n' + valStr;
                             }
                         }
                     },
@@ -495,9 +498,17 @@
         document.querySelectorAll('.metric-tab').forEach(t => t.classList.toggle('active', t.dataset.metric === metric));
         const totals = getYearTotals(DATA);
         renderKpis(totals);
+        updateYoYTitle();
         updateChartMonthly();
         updateChartStacked();
         updateChartYoY();
+    }
+
+    function updateYoYTitle() {
+        const el = document.getElementById('titleYoY');
+        if (!el) return;
+        const metricLabel = currentMetric === 'revenue' ? 'Revenue' : (currentMetric === 'adb' ? 'ADB' : 'Room Nights');
+        el.textContent = 'Year-over-Year Change % (' + metricLabel + ') — by Market';
     }
 
     async function load() {
@@ -518,6 +529,7 @@
         renderMonthSelector();
         updateChartMonthly();
         updateChartStacked();
+        updateYoYTitle();
         updateChartYoY();
 
         document.querySelectorAll('.metric-tab').forEach(tab => {
