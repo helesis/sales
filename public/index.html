@@ -2217,7 +2217,10 @@
         }
 
         function toggleChartDataLegend(container) {
-            const chart = container._chart;
+            let chart = container._chart;
+            if (!chart && container.querySelector('canvas') && typeof Chart !== 'undefined') {
+                chart = Chart.getChart(container.querySelector('canvas'));
+            }
             if (!chart || !chart.data) return;
             const legendEl = container.querySelector('.chart-data-legend');
             if (!legendEl) return;
