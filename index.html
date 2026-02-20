@@ -2069,16 +2069,8 @@
                                 }
                                 return lines.filter(Boolean);
                             },
-                            color: function(ctx) {
-                                const yoy = getYoYChange(ctx.datasetIndex, ctx.dataIndex);
-                                if (yoy.deltaRn == null && yoy.deltaRev == null) return '#1e293b';
-                                const hasPos = (yoy.deltaRn != null && yoy.deltaRn > 0) || (yoy.deltaRev != null && yoy.deltaRev > 0);
-                                const hasNeg = (yoy.deltaRn != null && yoy.deltaRn < 0) || (yoy.deltaRev != null && yoy.deltaRev < 0);
-                                if (hasPos && !hasNeg) return '#16a34a';
-                                if (hasNeg && !hasPos) return '#dc2626';
-                                return '#1e293b';
-                            },
-                            font: { weight: 'bold', size: 11 },
+                            color: '#1e293b',
+                            font: { weight: 'normal', size: 11 },
                             padding: 4,
                             align: 'center',
                             anchor: 'center',
