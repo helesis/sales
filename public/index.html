@@ -2055,32 +2055,35 @@
                                 const totalRev = revTotals[dsIdx];
                                 const pctRn = totalRn ? (value / totalRn) * 100 : 0;
                                 const pctRev = totalRev ? (rev / totalRev) * 100 : 0;
-                                const rnStr = value != null ? value.toLocaleString('tr-TR') + ' RN (' + pctRn.toFixed(1) + '%)' : '';
-                                const euroStr = '€' + rev.toLocaleString('tr-TR') + ' (' + pctRev.toFixed(1) + '%)';
+                                const fmt = function(n) { try { return Number(n).toLocaleString('tr-TR'); } catch(e) { return String(n); } };
+                                const rnStr = value != null ? fmt(value) + ' RN (' + pctRn.toFixed(1) + '%)' : '';
+                                const euroStr = '€' + fmt(rev) + ' (' + pctRev.toFixed(1) + '%)';
                                 const lines = [name, rnStr, euroStr];
                                 const yoy = getYoYChange(dsIdx, i);
-                                if (yoy.deltaRn != null || yoy.deltaRev != null) {
+                                if (dsIdx < 4) {
                                     const up = '\u2191', down = '\u2193';
-                                    const rnPart = yoy.deltaRn != null && yoy.deltaRn !== 0 ? (yoy.deltaRn > 0 ? up : down) + ' ' + Math.abs(yoy.deltaRn).toLocaleString('tr-TR') + ' RN' : '';
-                                    const revPart = yoy.deltaRev != null && yoy.deltaRev !== 0 ? (yoy.deltaRev > 0 ? up : down) + ' €' + (Math.abs(yoy.deltaRev) >= 1000 ? (Math.abs(yoy.deltaRev) / 1000).toFixed(1) + 'k' : Math.abs(yoy.deltaRev).toLocaleString('tr-TR')) : '';
+                                    const rnPart = yoy.deltaRn != null && yoy.deltaRn !== 0 ? (yoy.deltaRn > 0 ? up : down) + ' ' + fmt(Math.abs(yoy.deltaRn)) + ' RN' : '';
+                                    const revPart = yoy.deltaRev != null && yoy.deltaRev !== 0 ? (yoy.deltaRev > 0 ? up : down) + ' €' + (Math.abs(yoy.deltaRev) >= 1000 ? (Math.abs(yoy.deltaRev) / 1000).toFixed(1) + 'k' : fmt(Math.abs(yoy.deltaRev))) : '';
                                     const changeStr = [rnPart, revPart].filter(Boolean).join(', ');
-                                    if (changeStr) lines.push('(' + changeStr + ')');
+                                    lines.push(changeStr ? '(' + changeStr + ')' : '(vs prev. year)');
                                 }
                                 return lines.filter(Boolean);
                             },
                             color: function(ctx) {
                                 const yoy = getYoYChange(ctx.datasetIndex, ctx.dataIndex);
-                                if (yoy.deltaRn == null && yoy.deltaRev == null) return '#ffffff';
+                                if (yoy.deltaRn == null && yoy.deltaRev == null) return '#1e293b';
                                 const hasPos = (yoy.deltaRn != null && yoy.deltaRn > 0) || (yoy.deltaRev != null && yoy.deltaRev > 0);
                                 const hasNeg = (yoy.deltaRn != null && yoy.deltaRn < 0) || (yoy.deltaRev != null && yoy.deltaRev < 0);
                                 if (hasPos && !hasNeg) return '#16a34a';
                                 if (hasNeg && !hasPos) return '#dc2626';
-                                return '#ffffff';
+                                return '#1e293b';
                             },
-                            font: { weight: 'bold', size: 10 },
-                            padding: 2,
+                            font: { weight: 'bold', size: 11 },
+                            padding: 4,
                             align: 'center',
-                            anchor: 'center'
+                            anchor: 'center',
+                            textStrokeWidth: 1,
+                            textStrokeColor: 'rgba(255,255,255,0.8)'
                         }
                     }
                 }
@@ -2229,7 +2232,7 @@
             const isAvgRateChart = chart.canvas && chart.canvas.id === 'avgRateChart';
             const isRnChart = chart.canvas && chart.canvas.id === 'rnChart';
             const isRevenueMainmarketChart = chart.canvas && chart.canvas.id === 'revenueMainmarketChart';
-            const isRevenueChart = chart.canvas && chart.canvas.id === 'revenueChart';
+            const isRevenueChart = (chart.canvas && chart.canvas.id === 'revenueChart') || !!container.querySelector('#revenueChart');
             const showYoYColumn = (isAvgRateChart || isRnChart || isRevenueMainmarketChart || isRevenueChart) && datasets.length >= 2;
             let html = '<table><thead><tr><th>Label</th>';
             datasets.forEach(function(ds) {
