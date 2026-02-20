@@ -102,7 +102,7 @@
             color: #999;
         }
 
-        /* Yıllık Gelir Hedefi kartı */
+        /* Annual Revenue Target card */
         .gauge-card .value {
             font-size: 1.8em;
         }
@@ -430,7 +430,7 @@
         <div id="errorContainer" style="display: none;"></div>
 
         <div id="dashboardContent" style="display: none;">
-            <!-- Bugünün Metrikleri -->
+            <!-- Today's Metrics -->
             <div class="metrics-grid">
                 <div class="metric-card">
                     <div class="icon">📋</div>
@@ -769,9 +769,9 @@
             const actualRow = document.getElementById('annualStatsActual');
             const targetRow = document.getElementById('annualStatsTarget');
             const remainingRow = document.getElementById('annualStatsRemaining');
-            if (actualRow) actualRow.textContent = '💰 Actual: €' + actual.toLocaleString('tr-TR');
-            if (targetRow) targetRow.textContent = '🎯 Target: €' + target.toLocaleString('tr-TR');
-            if (remainingRow) remainingRow.textContent = '📈 Remaining: €' + remaining.toLocaleString('tr-TR');
+            if (actualRow) actualRow.textContent = '💰 Actual: €' + actual.toLocaleString('en');
+            if (targetRow) targetRow.textContent = '🎯 Target: €' + target.toLocaleString('en');
+            if (remainingRow) remainingRow.textContent = '📈 Remaining: €' + remaining.toLocaleString('en');
 
             // Badge
             const badgeEl = document.getElementById('annualTargetBadge');
@@ -784,7 +784,7 @@
         // İlk yükleme veya periyodik güncelleme için veri çek (Supabase'ten)
         async function loadDashboardData(isSilentRefresh) {
             if (!supabaseClient) {
-                showError('Supabase bağlantısı yapılandırılmamış.');
+                showError('Supabase not configured.');
                 return;
             }
             try {
@@ -927,7 +927,7 @@
                 }
             } catch (error) {
                 console.error('Veri yükleme hatası:', error);
-                if (!isSilentRefresh) showError('Error loading data: ' + error.message);
+                if (!isSilentRefresh) showError('Veri yüklenirken hata oluştu: ' + error.message);
             }
         }
 
@@ -1587,7 +1587,7 @@
                         },
                         tooltip: {
                             mode: 'index',
-                            intersect: false,
+                            intersect: true,
                             backgroundColor: 'rgba(0,0,0,0.8)',
                             padding: 12,
                             callbacks: {
@@ -1603,8 +1603,8 @@
                                         if (stack) byStack[stack] = (byStack[stack] || 0) + (t.parsed.x || 0);
                                     });
                                     var parts = [];
-                                    if (byStack['2026']) parts.push('2026 total: €' + byStack['2026'].toLocaleString('tr-TR'));
-                                    if (byStack['2025']) parts.push('2025 total: €' + byStack['2025'].toLocaleString('tr-TR'));
+                                    if (byStack['2026']) parts.push('2026 toplam: €' + byStack['2026'].toLocaleString('tr-TR'));
+                                    if (byStack['2025']) parts.push('2025 toplam: €' + byStack['2025'].toLocaleString('tr-TR'));
                                     return parts.join('\n');
                                 }
                             }
@@ -1951,8 +1951,18 @@
                 revenue2022s.reduce((s, v) => s + v, 0)
             ];
             const revenueByYear = [revenue2026s, revenue2025s, revenue2024s, revenue2023s, revenue2022s];
+            const rnByYear = [rn2026s, rn2025s, rn2024s, rn2023s, rn2022s];
             const yearLabels = ['2026', '2025', '2024', '2023', '2022'];
             const bgColors = labelsSorted.map((_, i) => colors.markets[i % colors.markets.length]);
+
+            function getYoYChange(dsIdx, dataIndex) {
+                if (dsIdx >= 4) return { deltaRn: null, deltaRev: null };
+                const currRn = rnByYear[dsIdx][dataIndex] || 0;
+                const prevRn = rnByYear[dsIdx + 1][dataIndex] || 0;
+                const currRev = revenueByYear[dsIdx][dataIndex] || 0;
+                const prevRev = revenueByYear[dsIdx + 1][dataIndex] || 0;
+                return { deltaRn: currRn - prevRn, deltaRev: currRev - prevRev };
+            }
 
             const ctx = document.getElementById('marketShareChart').getContext('2d');
             if (marketShareChart) {
@@ -2018,11 +2028,24 @@
                                     const val = context.parsed;
                                     const pct = totalRn ? (val / totalRn) * 100 : 0;
                                     const rev = revenueByYear[datasetIndex][dataIndex] || 0;
-                                    return `${context.label}: ${val.toLocaleString('tr-TR')} RN · €${rev.toLocaleString('tr-TR')} (${pct.toFixed(1)}%)`;
+                                    let line = context.label + ': ' + val.toLocaleString('tr-TR') + ' RN · €' + rev.toLocaleString('tr-TR') + ' (' + pct.toFixed(1) + '%)';
+                                    const yoy = getYoYChange(datasetIndex, dataIndex);
+                                    if (yoy.deltaRn != null || yoy.deltaRev != null) {
+                                        const up = '\u2191', down = '\u2193';
+                                        const rnPart = yoy.deltaRn != null && yoy.deltaRn !== 0 ? (yoy.deltaRn > 0 ? up : down) + ' ' + (yoy.deltaRn > 0 ? '+' : '') + yoy.deltaRn.toLocaleString('tr-TR') + ' RN' : '';
+                                        const revPart = yoy.deltaRev != null && yoy.deltaRev !== 0 ? (yoy.deltaRev > 0 ? up : down) + ' ' + (yoy.deltaRev > 0 ? '+' : '') + '€' + yoy.deltaRev.toLocaleString('tr-TR') : '';
+                                        const changeStr = [rnPart, revPart].filter(Boolean).join(', ');
+                                        if (changeStr) line += '\nvs prev. year: ' + changeStr;
+                                    }
+                                    return line;
                                 }
                             }
                         },
                         datalabels: {
+                            display: function(ctx) {
+                                var meta = ctx.chart.getDatasetMeta(ctx.datasetIndex);
+                                return meta && !meta.hidden;
+                            },
                             formatter: (value, ctx) => {
                                 const i = ctx.dataIndex;
                                 const dsIdx = ctx.datasetIndex;
@@ -2032,15 +2055,35 @@
                                 const totalRev = revTotals[dsIdx];
                                 const pctRn = totalRn ? (value / totalRn) * 100 : 0;
                                 const pctRev = totalRev ? (rev / totalRev) * 100 : 0;
-                                const rnStr = value != null ? value.toLocaleString('tr-TR') + ' RN (' + pctRn.toFixed(1) + '%)' : '';
-                                const euroStr = '€' + rev.toLocaleString('tr-TR') + ' (' + pctRev.toFixed(1) + '%)';
-                                return [name, rnStr, euroStr].filter(Boolean);
+                                const fmt = function(n) { try { return Number(n).toLocaleString('tr-TR'); } catch(e) { return String(n); } };
+                                const rnStr = value != null ? fmt(value) + ' RN (' + pctRn.toFixed(1) + '%)' : '';
+                                const euroStr = '€' + fmt(rev) + ' (' + pctRev.toFixed(1) + '%)';
+                                const lines = [name, rnStr, euroStr];
+                                const yoy = getYoYChange(dsIdx, i);
+                                if (dsIdx < 4) {
+                                    const up = '\u2191', down = '\u2193';
+                                    const rnPart = yoy.deltaRn != null && yoy.deltaRn !== 0 ? (yoy.deltaRn > 0 ? up : down) + ' ' + fmt(Math.abs(yoy.deltaRn)) + ' RN' : '';
+                                    const revPart = yoy.deltaRev != null && yoy.deltaRev !== 0 ? (yoy.deltaRev > 0 ? up : down) + ' €' + (Math.abs(yoy.deltaRev) >= 1000 ? (Math.abs(yoy.deltaRev) / 1000).toFixed(1) + 'k' : fmt(Math.abs(yoy.deltaRev))) : '';
+                                    const changeStr = [rnPart, revPart].filter(Boolean).join(', ');
+                                    lines.push(changeStr ? '(' + changeStr + ')' : '(vs prev. year)');
+                                }
+                                return lines.filter(Boolean);
                             },
-                            color: '#ffffff',
-                            font: { weight: 'bold', size: 10 },
-                            padding: 2,
+                            color: function(ctx) {
+                                const yoy = getYoYChange(ctx.datasetIndex, ctx.dataIndex);
+                                if (yoy.deltaRn == null && yoy.deltaRev == null) return '#1e293b';
+                                const hasPos = (yoy.deltaRn != null && yoy.deltaRn > 0) || (yoy.deltaRev != null && yoy.deltaRev > 0);
+                                const hasNeg = (yoy.deltaRn != null && yoy.deltaRn < 0) || (yoy.deltaRev != null && yoy.deltaRev < 0);
+                                if (hasPos && !hasNeg) return '#16a34a';
+                                if (hasNeg && !hasPos) return '#dc2626';
+                                return '#1e293b';
+                            },
+                            font: { weight: 'bold', size: 11 },
+                            padding: 4,
                             align: 'center',
-                            anchor: 'center'
+                            anchor: 'center',
+                            textStrokeWidth: 1,
+                            textStrokeColor: 'rgba(255,255,255,0.8)'
                         }
                     }
                 }
@@ -2177,33 +2220,40 @@
         }
 
         function toggleChartDataLegend(container) {
-            const chart = container._chart;
+            let chart = container._chart;
+            if (!chart && container.querySelector('canvas') && typeof Chart !== 'undefined') {
+                chart = Chart.getChart(container.querySelector('canvas'));
+            }
             if (!chart || !chart.data) return;
             const legendEl = container.querySelector('.chart-data-legend');
             if (!legendEl) return;
-            const isAvgRateChart = chart.canvas && chart.canvas.id === 'avgRateChart';
-            const isRnChart = chart.canvas && chart.canvas.id === 'rnChart';
             const labels = chart.data.labels || [];
             const datasets = chart.data.datasets || [];
-            let html = '<table><thead><tr><th>Etiket</th>';
+            const isAvgRateChart = chart.canvas && chart.canvas.id === 'avgRateChart';
+            const isRnChart = chart.canvas && chart.canvas.id === 'rnChart';
+            const isRevenueMainmarketChart = chart.canvas && chart.canvas.id === 'revenueMainmarketChart';
+            const isRevenueChart = (chart.canvas && chart.canvas.id === 'revenueChart') || !!container.querySelector('#revenueChart');
+            const showYoYColumn = (isAvgRateChart || isRnChart || isRevenueMainmarketChart || isRevenueChart) && datasets.length >= 2;
+            let html = '<table><thead><tr><th>Label</th>';
             datasets.forEach(function(ds) {
-                html += '<th>' + (ds.label || '') + '</th>';
+                if (!ds.hidden) html += '<th>' + (ds.label || '') + '</th>';
             });
-            if ((isAvgRateChart || isRnChart) && datasets.length >= 2) {
-                html += '<th>YoY Change (%)</th>';
+            if (showYoYColumn) {
+                html += '<th>2026 vs 2025 (%)</th>';
             }
             html += '</tr></thead><tbody>';
             const maxLen = Math.max(labels.length, datasets.length ? Math.max.apply(null, datasets.map(function(d) { return (d.data || []).length; })) : 0);
             for (var i = 0; i < maxLen; i++) {
                 html += '<tr><td>' + (labels[i] !== undefined && labels[i] !== null ? labels[i] : '-') + '</td>';
                 datasets.forEach(function(ds) {
+                    if (ds.hidden) return;
                     var v = (ds.data || [])[i];
                     html += '<td>' + formatDataLegendValue(v) + '</td>';
                 });
-                if ((isAvgRateChart || isRnChart) && datasets.length >= 2) {
+                if (showYoYColumn) {
                     var v2026 = (datasets[0].data || [])[i];
                     var v2025 = (datasets[1].data || [])[i];
-                    var diffCell = '-';
+                    var diffCell = '—';
                     if (typeof v2026 === 'number' && typeof v2025 === 'number' && v2025 !== 0) {
                         var diffPct = ((v2026 - v2025) / v2025) * 100;
                         var sign = diffPct > 0 ? '+' : '';
@@ -2238,7 +2288,7 @@
         function showError(message) {
             document.getElementById('loadingIndicator').style.display = 'none';
             const errorContainer = document.getElementById('errorContainer');
-            errorContainer.innerHTML = `<div class="error">❌ ${message}<br><small>Is the server running? (http://localhost:3001)</small></div>`;
+            errorContainer.innerHTML = `<div class="error">❌ ${message}<br><small>Server çalışıyor mu? (http://localhost:3001)</small></div>`;
             errorContainer.style.display = 'block';
         }
 
@@ -2247,7 +2297,7 @@
             document.getElementById('appScreen').style.display = 'none';
         }
         function showAppScreen(displayName) {
-            document.getElementById('displayName').textContent = displayName ? displayName : '—';
+            document.getElementById('displayName').textContent = displayName ? 'Merhaba, ' + displayName : '—';
             document.getElementById('loginScreen').style.display = 'none';
             document.getElementById('appScreen').style.display = 'block';
         }
@@ -2282,7 +2332,7 @@
                 return;
             }
             if (!supabaseClient) {
-                errEl.textContent = 'Supabase not configured.';
+                errEl.textContent = 'Supabase bağlantısı yapılandırılmamış.';
                 errEl.style.display = 'block';
                 return;
             }
