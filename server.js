@@ -569,8 +569,356 @@ async function syncBobRevenueAnalysis() {
   }
 }
 
+// Sync: Bugün acente bazlı RN
+async function syncTodayAgentRn() {
+  let connection;
+  try {
+    connection = await oracledb.getConnection(dbConfig);
+    const result = await connection.execute(
+      `SELECT r.AGENTNAME AS segment, COUNT(*) AS rn_count,
+              ROUND(SUM(CASE WHEN r.mainmarketcode_long = 'Local' THEN r.netpostamount / NULLIF(ex_s.exch_rate_day, 0) ELSE r.netpostamount / NULLIF(ex_d.exch_rate_day, 0) END), 0) AS revenue
+       FROM v8live.pro_isv_reservationinfo_voyage r
+       LEFT JOIN pro_isv_exchangerates ex_s ON ex_s.wdat_date = r.saledate AND ex_s.zcur_id = 1013
+       LEFT JOIN pro_isv_exchangerates ex_d ON ex_d.wdat_date = r.detail_date AND ex_d.zcur_id = 1013
+       WHERE r.reservationstatus = 1 AND TRUNC(r.saledate) = TRUNC(SYSDATE) AND TO_CHAR(r.detail_date, 'YYYY') = '2026'
+       GROUP BY r.AGENTNAME ORDER BY rn_count DESC`,
+      [], { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    const data = result.rows || [];
+    if (supabase && data.length > 0) {
+      const supabaseData = data.map(row => ({
+        segment: row.SEGMENT || row.segment || '',
+        rn_count: parseInt(row.RN_COUNT || row.rn_count || 0),
+        revenue: parseFloat(row.REVENUE || row.revenue || 0)
+      }));
+      await syncToSupabase('today_agent_rn', supabaseData, true);
+    }
+    console.log('>>> Sync: today_agent_rn');
+    return data;
+  } catch (err) {
+    console.error('>>> Sync hatası (today_agent_rn):', err.message);
+    return [];
+  } finally {
+    if (connection) await connection.close();
+  }
+}
+
+// Sync: Bugün girilen RN aylık dağılım
+async function syncTodayRnByMonth() {
+  let connection;
+  try {
+    connection = await oracledb.getConnection(dbConfig);
+    const result = await connection.execute(
+      `SELECT TO_CHAR(r.detail_date, 'MM') AS month_num, COUNT(*) AS total_rn,
+              ROUND(SUM(CASE WHEN r.mainmarketcode_long = 'Local' THEN r.netpostamount / NULLIF(ex_s.exch_rate_day, 0) ELSE r.netpostamount / NULLIF(ex_d.exch_rate_day, 0) END), 0) AS total_revenue,
+              ROUND(SUM(CASE WHEN r.mainmarketcode_long = 'Local' THEN r.netpostamount / NULLIF(ex_s.exch_rate_day, 0) ELSE r.netpostamount / NULLIF(ex_d.exch_rate_day, 0) END) / NULLIF(SUM(r.noofadults + NVL(r.ca3, 0) / 2), 0), 2) AS adb
+       FROM v8live.pro_isv_reservationinfo_voyage r
+       LEFT JOIN pro_isv_exchangerates ex_s ON ex_s.wdat_date = r.saledate AND ex_s.zcur_id = 1013
+       LEFT JOIN pro_isv_exchangerates ex_d ON ex_d.wdat_date = r.detail_date AND ex_d.zcur_id = 1013
+       WHERE r.reservationstatus = 1 AND TRUNC(r.saledate) = TRUNC(SYSDATE) AND TO_CHAR(r.detail_date, 'YYYY') = '2026'
+       GROUP BY TO_CHAR(r.detail_date, 'MM') ORDER BY TO_CHAR(r.detail_date, 'MM')`,
+      [], { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    const data = result.rows || [];
+    if (supabase && data.length > 0) {
+      const supabaseData = data.map(row => ({
+        month_num: row.MONTH_NUM || row.month_num || '',
+        total_rn: parseInt(row.TOTAL_RN || row.total_rn || 0),
+        total_revenue: parseFloat(row.TOTAL_REVENUE || row.total_revenue || 0),
+        adb: parseFloat(row.ADB || row.adb || 0)
+      }));
+      await syncToSupabase('today_rn_by_month', supabaseData, true);
+    }
+    console.log('>>> Sync: today_rn_by_month');
+    return data;
+  } catch (err) {
+    console.error('>>> Sync hatası (today_rn_by_month):', err.message);
+    return [];
+  } finally {
+    if (connection) await connection.close();
+  }
+}
+
+// Sync: Bugün girilen RN aylık pazar dağılımı
+async function syncTodayRnByMonthMarket() {
+  let connection;
+  try {
+    connection = await oracledb.getConnection(dbConfig);
+    const result = await connection.execute(
+      `WITH market_totals AS (
+          SELECT r.mainmarketcode_long, COUNT(*) AS total_rn FROM v8live.pro_isv_reservationinfo_voyage r
+          WHERE r.reservationstatus = 1 AND TO_CHAR(r.detail_date, 'YYYY') = '2026' AND r.saledate <= ADD_MONTHS(TRUNC(SYSDATE), -12 * (2026 - TO_NUMBER(TO_CHAR(r.detail_date, 'YYYY'))))
+          GROUP BY r.mainmarketcode_long ORDER BY total_rn DESC FETCH FIRST 15 ROWS ONLY
+      ),
+      today_by_month_market AS (
+          SELECT TO_CHAR(r.detail_date, 'MM') AS month_num, r.mainmarketcode_long AS market, COUNT(*) AS rn
+          FROM v8live.pro_isv_reservationinfo_voyage r
+          WHERE r.reservationstatus = 1 AND TRUNC(r.saledate) = TRUNC(SYSDATE) AND TO_CHAR(r.detail_date, 'YYYY') = '2026'
+            AND r.mainmarketcode_long IN (SELECT mainmarketcode_long FROM market_totals)
+          GROUP BY TO_CHAR(r.detail_date, 'MM'), r.mainmarketcode_long
+      )
+      SELECT t.month_num, t.market, t.rn, mt.total_rn AS market_total FROM today_by_month_market t
+      JOIN market_totals mt ON t.market = mt.mainmarketcode_long ORDER BY t.month_num, mt.total_rn DESC`,
+      [], { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    const data = result.rows || [];
+    if (supabase && data.length > 0) {
+      const supabaseData = data.map(row => ({
+        month_num: row.MONTH_NUM || row.month_num || '',
+        market: row.MARKET || row.market || '',
+        rn: parseInt(row.RN || row.rn || 0),
+        market_total: parseInt(row.MARKET_TOTAL || row.market_total || 0)
+      }));
+      await syncToSupabase('today_rn_by_month_market', supabaseData, true);
+    }
+    console.log('>>> Sync: today_rn_by_month_market');
+    return data;
+  } catch (err) {
+    console.error('>>> Sync hatası (today_rn_by_month_market):', err.message);
+    return [];
+  } finally {
+    if (connection) await connection.close();
+  }
+}
+
+// Sync: Günlük pazar bazlı RN (2026 + totals 2025-2022)
+async function syncDailyMarketRn() {
+  let connection;
+  try {
+    connection = await oracledb.getConnection(dbConfig);
+    const result = await connection.execute(
+      `WITH market_totals AS (
+          SELECT r.mainmarketcode_long, COUNT(*) as total_rn FROM v8live.pro_isv_reservationinfo_voyage r
+          WHERE r.reservationstatus = 1 AND TO_CHAR(r.detail_date, 'YYYY') = '2026' AND r.saledate <= ADD_MONTHS(TRUNC(SYSDATE), -12 * (2026 - TO_NUMBER(TO_CHAR(r.detail_date, 'YYYY'))))
+          GROUP BY r.mainmarketcode_long ORDER BY total_rn DESC FETCH FIRST 15 ROWS ONLY
+      ),
+      daily_data AS (
+          SELECT r.detail_date, r.mainmarketcode_long, COUNT(*) as rn_count FROM v8live.pro_isv_reservationinfo_voyage r
+          WHERE r.reservationstatus = 1 AND TO_CHAR(r.detail_date, 'YYYY') = '2026' AND r.saledate <= ADD_MONTHS(TRUNC(SYSDATE), -12 * (2026 - TO_NUMBER(TO_CHAR(r.detail_date, 'YYYY'))))
+            AND r.mainmarketcode_long IN (SELECT mainmarketcode_long FROM market_totals)
+          GROUP BY r.detail_date, r.mainmarketcode_long
+      )
+      SELECT TO_CHAR(dd.detail_date, 'YYYY-MM-DD') as date_str, dd.mainmarketcode_long as market, dd.rn_count, mt.total_rn as market_total
+      FROM daily_data dd JOIN market_totals mt ON dd.mainmarketcode_long = mt.mainmarketcode_long ORDER BY dd.detail_date, mt.total_rn DESC`,
+      [], { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    const topMarkets = [...new Set((result.rows || []).map(r => (r.MARKET || r.market || '').trim()).filter(Boolean))];
+    const inClause = topMarkets.map((_, i) => ':' + (i + 1)).join(',');
+    const inSql = topMarkets.length ? ` AND r.mainmarketcode_long IN (${inClause})` : '';
+    const bindArr = topMarkets.length ? topMarkets : [];
+    const [result2025, result2024, result2023, result2022] = await Promise.all([
+      connection.execute(`SELECT TO_CHAR(r.detail_date, 'MM-DD') AS month_day, SUM(1) AS total_rn FROM v8live.pro_isv_reservationinfo_voyage r WHERE r.reservationstatus = 1 AND TO_CHAR(r.detail_date, 'YYYY') = '2025' AND r.saledate <= ADD_MONTHS(TRUNC(SYSDATE), -12)${inSql} GROUP BY TO_CHAR(r.detail_date, 'MM-DD') ORDER BY TO_CHAR(r.detail_date, 'MM-DD')`, bindArr, { outFormat: oracledb.OUT_FORMAT_OBJECT }),
+      connection.execute(`SELECT TO_CHAR(r.detail_date, 'MM-DD') AS month_day, SUM(1) AS total_rn FROM v8live.pro_isv_reservationinfo_voyage r WHERE r.reservationstatus = 1 AND TO_CHAR(r.detail_date, 'YYYY') = '2024' AND r.saledate <= ADD_MONTHS(TRUNC(SYSDATE), -24)${inSql} GROUP BY TO_CHAR(r.detail_date, 'MM-DD') ORDER BY TO_CHAR(r.detail_date, 'MM-DD')`, bindArr, { outFormat: oracledb.OUT_FORMAT_OBJECT }),
+      connection.execute(`SELECT TO_CHAR(r.detail_date, 'MM-DD') AS month_day, SUM(1) AS total_rn FROM v8live.pro_isv_reservationinfo_voyage r WHERE r.reservationstatus = 1 AND TO_CHAR(r.detail_date, 'YYYY') = '2023' AND r.saledate <= ADD_MONTHS(TRUNC(SYSDATE), -36)${inSql} GROUP BY TO_CHAR(r.detail_date, 'MM-DD') ORDER BY TO_CHAR(r.detail_date, 'MM-DD')`, bindArr, { outFormat: oracledb.OUT_FORMAT_OBJECT }),
+      connection.execute(`SELECT TO_CHAR(r.detail_date, 'MM-DD') AS month_day, SUM(1) AS total_rn FROM v8live.pro_isv_reservationinfo_voyage r WHERE r.reservationstatus = 1 AND TO_CHAR(r.detail_date, 'YYYY') = '2022' AND r.saledate <= ADD_MONTHS(TRUNC(SYSDATE), -48)${inSql} GROUP BY TO_CHAR(r.detail_date, 'MM-DD') ORDER BY TO_CHAR(r.detail_date, 'MM-DD')`, bindArr, { outFormat: oracledb.OUT_FORMAT_OBJECT })
+    ]);
+    if (supabase && result.rows && result.rows.length > 0) {
+      const supabaseData2026 = result.rows.map(row => ({
+        date_str: row.DATE_STR || row.date_str || '',
+        market: row.MARKET || row.market || '',
+        rn_count: parseInt(row.RN_COUNT || row.rn_count || 0),
+        market_total: parseInt(row.MARKET_TOTAL || row.market_total || 0)
+      }));
+      await syncToSupabase('daily_market_rn', supabaseData2026, true);
+    }
+    const totalsData = [];
+    [result2025.rows, result2024.rows, result2023.rows, result2022.rows].forEach((rows, idx) => {
+      const year = 2025 - idx;
+      if (rows && rows.length > 0) rows.forEach(row => totalsData.push({ year_num: year, month_day: row.MONTH_DAY || row.month_day || '', total_rn: parseInt(row.TOTAL_RN || row.total_rn || 0) }));
+    });
+    if (supabase && totalsData.length > 0) await syncToSupabase('daily_market_rn_totals', totalsData, true);
+    console.log('>>> Sync: daily_market_rn, daily_market_rn_totals');
+    return {
+      data2026: result.rows,
+      daily_2025_totals: result2025.rows,
+      daily_2024_totals: result2024.rows,
+      daily_2023_totals: result2023.rows,
+      daily_2022_totals: result2022.rows
+    };
+  } catch (err) {
+    console.error('>>> Sync hatası (daily_market_rn):', err.message);
+    return { data2026: [], daily_2025_totals: [], daily_2024_totals: [], daily_2023_totals: [], daily_2022_totals: [] };
+  } finally {
+    if (connection) await connection.close();
+  }
+}
+
+// Sync: Booking pace
+async function syncBookingPace() {
+  let connection;
+  try {
+    connection = await oracledb.getConnection(dbConfig);
+    const result = await connection.execute(
+      `SELECT CASE t_m.month_num WHEN '01' THEN 'Jan' WHEN '02' THEN 'Feb' WHEN '03' THEN 'Mar' WHEN '04' THEN 'Apr' WHEN '05' THEN 'May' WHEN '06' THEN 'Jun' WHEN '07' THEN 'Jul' WHEN '08' THEN 'Aug' WHEN '09' THEN 'Sep' WHEN '10' THEN 'Oct' WHEN '11' THEN 'Nov' WHEN '12' THEN 'Dec' END AS month, t_m.month_num,
+          NVL(last_30_2026.rn, 0) AS last_30_days_rn, NVL(last_15_2026.rn, 0) AS last_15_days_rn,
+          NVL(last_30_2025.rn, 0) AS last_30_days_2025_rn, NVL(last_15_2025.rn, 0) AS last_15_days_2025_rn
+      FROM (SELECT '01' month_num FROM dual UNION ALL SELECT '02' FROM dual UNION ALL SELECT '03' FROM dual UNION ALL SELECT '04' FROM dual UNION ALL SELECT '05' FROM dual UNION ALL SELECT '06' FROM dual UNION ALL SELECT '07' FROM dual UNION ALL SELECT '08' FROM dual UNION ALL SELECT '09' FROM dual UNION ALL SELECT '10' FROM dual UNION ALL SELECT '11' FROM dual UNION ALL SELECT '12' FROM dual) t_m
+      LEFT JOIN (SELECT TO_CHAR(r.detail_date, 'MM') AS month_num, COUNT(*) AS rn FROM v8live.pro_isv_reservationinfo_voyage r WHERE r.reservationstatus = 1 AND TO_CHAR(r.detail_date, 'YYYY') = '2026' AND r.saledate > TRUNC(SYSDATE) - 30 AND r.saledate <= TRUNC(SYSDATE) - 15 GROUP BY TO_CHAR(r.detail_date, 'MM')) last_30_2026 ON t_m.month_num = last_30_2026.month_num
+      LEFT JOIN (SELECT TO_CHAR(r.detail_date, 'MM') AS month_num, COUNT(*) AS rn FROM v8live.pro_isv_reservationinfo_voyage r WHERE r.reservationstatus = 1 AND TO_CHAR(r.detail_date, 'YYYY') = '2026' AND r.saledate > TRUNC(SYSDATE) - 15 GROUP BY TO_CHAR(r.detail_date, 'MM')) last_15_2026 ON t_m.month_num = last_15_2026.month_num
+      LEFT JOIN (SELECT TO_CHAR(r.detail_date, 'MM') AS month_num, COUNT(*) AS rn FROM v8live.pro_isv_reservationinfo_voyage r WHERE r.reservationstatus = 1 AND TO_CHAR(r.detail_date, 'YYYY') = '2025' AND r.saledate > ADD_MONTHS(TRUNC(SYSDATE), -12) - 30 AND r.saledate <= ADD_MONTHS(TRUNC(SYSDATE), -12) - 15 GROUP BY TO_CHAR(r.detail_date, 'MM')) last_30_2025 ON t_m.month_num = last_30_2025.month_num
+      LEFT JOIN (SELECT TO_CHAR(r.detail_date, 'MM') AS month_num, COUNT(*) AS rn FROM v8live.pro_isv_reservationinfo_voyage r WHERE r.reservationstatus = 1 AND TO_CHAR(r.detail_date, 'YYYY') = '2025' AND r.saledate > ADD_MONTHS(TRUNC(SYSDATE), -12) - 15 AND r.saledate <= ADD_MONTHS(TRUNC(SYSDATE), -12) GROUP BY TO_CHAR(r.detail_date, 'MM')) last_15_2025 ON t_m.month_num = last_15_2025.month_num
+      ORDER BY t_m.month_num`,
+      [], { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    const data = result.rows || [];
+    if (supabase && data.length > 0) {
+      const supabaseData = data.map(row => ({
+        month_num: row.MONTH_NUM || row.month_num || '',
+        month_label: row.MONTH || row.month || '',
+        last_30_days_rn: parseInt(row.LAST_30_DAYS_RN || row.last_30_days_rn || 0),
+        last_15_days_rn: parseInt(row.LAST_15_DAYS_RN || row.last_15_days_rn || 0),
+        last_30_days_2025_rn: parseInt(row.LAST_30_DAYS_2025_RN || row.last_30_days_2025_rn || 0),
+        last_15_days_2025_rn: parseInt(row.LAST_15_DAYS_2025_RN || row.last_15_days_2025_rn || 0)
+      }));
+      await syncToSupabase('booking_pace', supabaseData, true);
+    }
+    console.log('>>> Sync: booking_pace');
+    return data;
+  } catch (err) {
+    console.error('>>> Sync hatası (booking_pace):', err.message);
+    return [];
+  } finally {
+    if (connection) await connection.close();
+  }
+}
+
+// Sync: Yıllık gelir hedefi (annual_target)
+async function syncAnnualTarget() {
+  let connection;
+  try {
+    connection = await oracledb.getConnection(dbConfig);
+    const result = await connection.execute(
+      `SELECT ROUND(SUM(CASE WHEN r.mainmarketcode_long = 'Local' THEN r.netpostamount / NULLIF(ex_s.exch_rate_day, 0) ELSE r.netpostamount / NULLIF(ex_d.exch_rate_day, 0) END), 0) AS total_revenue_2026
+       FROM v8live.pro_isv_reservationinfo_voyage r
+       LEFT JOIN pro_isv_exchangerates ex_s ON ex_s.wdat_date = r.saledate AND ex_s.zcur_id = 1013
+       LEFT JOIN pro_isv_exchangerates ex_d ON ex_d.wdat_date = r.detail_date AND ex_d.zcur_id = 1013
+       WHERE r.reservationstatus = 1 AND TO_CHAR(r.detail_date, 'YYYY') = '2026' AND r.saledate <= TRUNC(SYSDATE)`,
+      [], { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    const row = result.rows && result.rows[0] ? result.rows[0] : {};
+    const totalRevenue = parseFloat(row.TOTAL_REVENUE_2026 || 0);
+    if (supabase) await upsertToSupabase('annual_target', { total_revenue_2026: totalRevenue }, true);
+    console.log('>>> Sync: annual_target');
+    return { TOTAL_REVENUE_2026: totalRevenue };
+  } catch (err) {
+    console.error('>>> Sync hatası (annual_target):', err.message);
+    return { TOTAL_REVENUE_2026: 0 };
+  } finally {
+    if (connection) await connection.close();
+  }
+}
+
+// Sync: Acente performansı (agent_performance)
+async function syncAgentPerformance() {
+  let connection;
+  try {
+    connection = await oracledb.getConnection(dbConfig);
+    const result = await connection.execute(
+      `WITH detail AS (
+          SELECT r.AGENTNAME, TO_CHAR(r.detail_date, 'YYYY') AS year_num,
+                 CASE WHEN r.mainmarketcode_long = 'Local' THEN r.netpostamount / NULLIF(ex_s.exch_rate_day, 0) ELSE r.netpostamount / NULLIF(ex_d.exch_rate_day, 0) END AS revenue,
+                 NVL(TRIM(r.mainmarketcode_long), 'Other') AS market
+          FROM v8live.pro_isv_reservationinfo_voyage r
+          LEFT JOIN pro_isv_exchangerates ex_s ON ex_s.wdat_date = r.saledate AND ex_s.zcur_id = 1013
+          LEFT JOIN pro_isv_exchangerates ex_d ON ex_d.wdat_date = r.detail_date AND ex_d.zcur_id = 1013
+          WHERE r.reservationstatus = 1 AND r.AGENTNAME IS NOT NULL AND TO_CHAR(r.detail_date, 'YYYY') IN ('2025', '2026')
+            AND r.saledate <= ADD_MONTHS(TRUNC(SYSDATE), -12 * (TO_NUMBER('2026') - TO_NUMBER(TO_CHAR(r.detail_date, 'YYYY'))))
+      ),
+      totals AS (SELECT AGENTNAME, SUM(CASE WHEN year_num = '2026' THEN revenue END) AS rev FROM detail GROUP BY AGENTNAME),
+      ranked AS (SELECT AGENTNAME, ROW_NUMBER() OVER (ORDER BY rev DESC NULLS LAST) AS rn FROM totals),
+      top_20 AS (SELECT AGENTNAME, rn FROM ranked WHERE rn <= 20),
+      agg AS (
+          SELECT r.AGENTNAME AS SEGMENT, r.market AS MARKET, t.rn AS AGENT_ORDER,
+                 ROUND(SUM(CASE WHEN r.year_num = '2026' THEN r.revenue END), 0) AS REVENUE_2026,
+                 ROUND(SUM(CASE WHEN r.year_num = '2025' THEN r.revenue END), 0) AS REVENUE_2025
+          FROM detail r JOIN top_20 t ON r.AGENTNAME = t.AGENTNAME
+          GROUP BY r.AGENTNAME, r.market, t.rn
+      )
+      SELECT SEGMENT, MARKET, REVENUE_2026, REVENUE_2025, AGENT_ORDER FROM agg ORDER BY AGENT_ORDER, REVENUE_2026 DESC`,
+      [], { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    const data = result.rows || [];
+    if (supabase && data.length > 0) {
+      const supabaseData = data.map(row => ({
+        segment: row.SEGMENT || row.segment || '',
+        market: row.MARKET || row.market || '',
+        revenue_2026: parseFloat(row.REVENUE_2026 || row.revenue_2026 || 0),
+        revenue_2025: parseFloat(row.REVENUE_2025 || row.revenue_2025 || 0),
+        agent_order: parseInt(row.AGENT_ORDER || row.agent_order || 0)
+      }));
+      await syncToSupabase('agent_performance', supabaseData, true);
+    }
+    console.log('>>> Sync: agent_performance');
+    return data;
+  } catch (err) {
+    console.error('>>> Sync hatası (agent_performance):', err.message);
+    return [];
+  } finally {
+    if (connection) await connection.close();
+  }
+}
+
+// Sync: Mainmarket BOB (market_mainmarket)
+async function syncMarketMainmarket() {
+  let connection;
+  try {
+    connection = await oracledb.getConnection(dbConfig);
+    const result = await connection.execute(
+      `WITH t_p AS (
+          SELECT r.mainmarketcode_long, TO_CHAR(r.detail_date, 'YYYY') AS year_num,
+                 CASE WHEN r.mainmarketcode_long = 'Local' THEN r.netpostamount / NULLIF(ex_s.exch_rate_day, 0) ELSE r.netpostamount / NULLIF(ex_d.exch_rate_day, 0) END AS revenue,
+                 r.noofadults + NVL(r.ca3, 0) / 2 AS pax, 1 AS room_nights
+          FROM v8live.pro_isv_reservationinfo_voyage r
+          LEFT JOIN pro_isv_exchangerates ex_s ON ex_s.wdat_date = r.saledate AND ex_s.zcur_id = 1013
+          LEFT JOIN pro_isv_exchangerates ex_d ON ex_d.wdat_date = r.detail_date AND ex_d.zcur_id = 1013
+          WHERE r.reservationstatus = 1 AND r.mainmarketcode_long IS NOT NULL AND TO_CHAR(r.detail_date, 'YYYY') IN ('2022', '2023', '2024', '2025', '2026')
+            AND r.saledate <= ADD_MONTHS(TRUNC(SYSDATE), -12 * (TO_NUMBER('2026') - TO_NUMBER(TO_CHAR(r.detail_date, 'YYYY'))))
+      ),
+      t_b AS (SELECT 'Local' AS market_code, 14925123 AS bud_revenue, 85668 AS bud_pax, 174.22 AS bud_adb FROM dual UNION ALL SELECT 'Great Britain', 3061206, 19271, 158.85 FROM dual UNION ALL SELECT 'Russia', 9179980, 50479, 181.86 FROM dual UNION ALL SELECT 'West Europe', 13452128, 86368, 155.75 FROM dual UNION ALL SELECT 'CIS (BDT)', 0, 1, 1 FROM dual UNION ALL SELECT 'Baltic', 0, 1, 1 FROM dual UNION ALL SELECT 'East Europe', 0, 1, 1 FROM dual UNION ALL SELECT 'Scandinavian', 0, 1, 1 FROM dual)
+      SELECT t_p.mainmarketcode_long AS SEGMENT,
+          ROUND(SUM(CASE WHEN t_p.year_num = '2026' THEN t_p.revenue END), 0) AS REVENUE_2026,
+          ROUND(SUM(CASE WHEN t_p.year_num = '2025' THEN t_p.revenue END), 0) AS REVENUE_2025,
+          ROUND(SUM(CASE WHEN t_p.year_num = '2024' THEN t_p.revenue END), 0) AS REVENUE_2024,
+          ROUND(SUM(CASE WHEN t_p.year_num = '2023' THEN t_p.revenue END), 0) AS REVENUE_2023,
+          ROUND(SUM(CASE WHEN t_p.year_num = '2022' THEN t_p.revenue END), 0) AS REVENUE_2022,
+          SUM(CASE WHEN t_p.year_num = '2026' THEN t_p.room_nights END) AS RN_2026, SUM(CASE WHEN t_p.year_num = '2025' THEN t_p.room_nights END) AS RN_2025,
+          SUM(CASE WHEN t_p.year_num = '2024' THEN t_p.room_nights END) AS RN_2024, SUM(CASE WHEN t_p.year_num = '2023' THEN t_p.room_nights END) AS RN_2023, SUM(CASE WHEN t_p.year_num = '2022' THEN t_p.room_nights END) AS RN_2022
+      FROM t_p LEFT JOIN t_b ON t_p.mainmarketcode_long = t_b.market_code GROUP BY t_p.mainmarketcode_long ORDER BY t_p.mainmarketcode_long`,
+      [], { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    );
+    const data = result.rows || [];
+    if (supabase && data.length > 0) {
+      const supabaseData = data.map(row => ({
+        segment: row.SEGMENT || row.segment || '',
+        revenue_2026: parseFloat(row.REVENUE_2026 || row.revenue_2026 || 0),
+        revenue_2025: parseFloat(row.REVENUE_2025 || row.revenue_2025 || 0),
+        revenue_2024: parseFloat(row.REVENUE_2024 || row.revenue_2024 || 0),
+        revenue_2023: parseFloat(row.REVENUE_2023 || row.revenue_2023 || 0),
+        revenue_2022: parseFloat(row.REVENUE_2022 || row.revenue_2022 || 0),
+        rn_2026: parseInt(row.RN_2026 || row.rn_2026 || 0),
+        rn_2025: parseInt(row.RN_2025 || row.rn_2025 || 0),
+        rn_2024: parseInt(row.RN_2024 || row.rn_2024 || 0),
+        rn_2023: parseInt(row.RN_2023 || row.rn_2023 || 0),
+        rn_2022: parseInt(row.RN_2022 || row.rn_2022 || 0)
+      }));
+      await syncToSupabase('market_mainmarket', supabaseData, true);
+    }
+    console.log('>>> Sync: market_mainmarket');
+    return data;
+  } catch (err) {
+    console.error('>>> Sync hatası (market_mainmarket):', err.message);
+    return [];
+  } finally {
+    if (connection) await connection.close();
+  }
+}
+
 // Sync: Tüm verileri senkronize et
 async function syncAllData() {
+  if (!supabase) {
+    console.log('>>> Sync atlandı: Supabase yapılandırılmamış');
+    return;
+  }
   if (!isWithinSyncHours()) {
     console.log('>>> Sync atlandı: Saat 09:00-17:00 dışında');
     return;
@@ -581,6 +929,14 @@ async function syncAllData() {
   await syncRnHeatmap();
   await syncAlosAdbHeatmap();
   await syncBobRevenueAnalysis();
+  await syncTodayAgentRn();
+  await syncTodayRnByMonth();
+  await syncTodayRnByMonthMarket();
+  await syncDailyMarketRn();
+  await syncBookingPace();
+  await syncAnnualTarget();
+  await syncAgentPerformance();
+  await syncMarketMainmarket();
   console.log('>>> Periyodik sync tamamlandı');
 }
 
@@ -866,452 +1222,68 @@ WHERE r.reservationstatus = 1
 
 // Bugün girilen rezervasyonlar: acente (AGENTNAME) bazlı RN ve toplam gelir
 app.get('/api/today-agent-rn', async (req, res) => {
-  let connection;
-
   try {
-    console.log('>>> Bugün acente bazlı RN çekiliyor...');
-    connection = await oracledb.getConnection(dbConfig);
-
-    const result = await connection.execute(
-      `SELECT
-    r.AGENTNAME AS segment,
-    COUNT(*) AS rn_count,
-    ROUND(SUM(CASE WHEN r.mainmarketcode_long = 'Local'
-                   THEN r.netpostamount / NULLIF(ex_s.exch_rate_day, 0)
-                   ELSE r.netpostamount / NULLIF(ex_d.exch_rate_day, 0)
-              END), 0) AS revenue
-FROM v8live.pro_isv_reservationinfo_voyage r
-LEFT JOIN pro_isv_exchangerates ex_s ON ex_s.wdat_date = r.saledate AND ex_s.zcur_id = 1013
-LEFT JOIN pro_isv_exchangerates ex_d ON ex_d.wdat_date = r.detail_date AND ex_d.zcur_id = 1013
-WHERE r.reservationstatus = 1
-  AND TRUNC(r.saledate) = TRUNC(SYSDATE)
-  AND TO_CHAR(r.detail_date, 'YYYY') = '2026'
-GROUP BY r.AGENTNAME
-ORDER BY rn_count DESC`,
-      [],
-      { outFormat: oracledb.OUT_FORMAT_OBJECT }
-    );
-
-    console.log('>>> Bugün acente bazlı RN başarılı:', result.rows.length, 'acente');
-    const data = result.rows || [];
-    
-    // Supabase'e yaz
-    if (supabase && data.length > 0) {
-      const supabaseData = data.map(row => ({
-        segment: row.SEGMENT || row.segment || '',
-        rn_count: parseInt(row.RN_COUNT || row.rn_count || 0),
-        revenue: parseFloat(row.REVENUE || row.revenue || 0)
-      }));
-      await syncToSupabase('today_agent_rn', supabaseData, false);
-    }
-    
-    res.json(data);
+    const data = await syncTodayAgentRn();
+    res.json(Array.isArray(data) ? data : []);
   } catch (err) {
     console.error('>>> HATA (today-agent-rn):', err.message);
     res.status(500).json({ error: err.message });
-  } finally {
-    if (connection) {
-      await connection.close();
-    }
   }
 });
 
 // Bugün girilen rezervasyonların 2026 aylarına göre room night dağılımı
 app.get('/api/today-rn-by-month', async (req, res) => {
-  let connection;
-
   try {
-    console.log('>>> Bugün girilen RN aylık dağılım çekiliyor...');
-    connection = await oracledb.getConnection(dbConfig);
-
-    const result = await connection.execute(
-      `SELECT
-    TO_CHAR(r.detail_date, 'MM') AS month_num,
-    COUNT(*) AS total_rn,
-    ROUND(SUM(CASE WHEN r.mainmarketcode_long = 'Local'
-                   THEN r.netpostamount / NULLIF(ex_s.exch_rate_day, 0)
-                   ELSE r.netpostamount / NULLIF(ex_d.exch_rate_day, 0)
-              END), 0) AS total_revenue,
-    ROUND(SUM(CASE WHEN r.mainmarketcode_long = 'Local'
-                   THEN r.netpostamount / NULLIF(ex_s.exch_rate_day, 0)
-                   ELSE r.netpostamount / NULLIF(ex_d.exch_rate_day, 0)
-              END) / NULLIF(SUM(r.noofadults + NVL(r.ca3, 0) / 2), 0), 2) AS adb
-FROM v8live.pro_isv_reservationinfo_voyage r
-LEFT JOIN pro_isv_exchangerates ex_s ON ex_s.wdat_date = r.saledate AND ex_s.zcur_id = 1013
-LEFT JOIN pro_isv_exchangerates ex_d ON ex_d.wdat_date = r.detail_date AND ex_d.zcur_id = 1013
-WHERE r.reservationstatus = 1
-  AND TRUNC(r.saledate) = TRUNC(SYSDATE)
-  AND TO_CHAR(r.detail_date, 'YYYY') = '2026'
-GROUP BY TO_CHAR(r.detail_date, 'MM')
-ORDER BY TO_CHAR(r.detail_date, 'MM')`,
-      [],
-      { outFormat: oracledb.OUT_FORMAT_OBJECT }
-    );
-
-    console.log('>>> Bugün RN aylık dağılım başarılı:', result.rows.length, 'ay');
-    const data = result.rows || [];
-    
-    // Supabase'e yaz
-    if (supabase && data.length > 0) {
-      const supabaseData = data.map(row => ({
-        month_num: row.MONTH_NUM || row.month_num || '',
-        total_rn: parseInt(row.TOTAL_RN || row.total_rn || 0),
-        total_revenue: parseFloat(row.TOTAL_REVENUE || row.total_revenue || 0),
-        adb: parseFloat(row.ADB || row.adb || 0)
-      }));
-      await syncToSupabase('today_rn_by_month', supabaseData, false);
-    }
-    
-    res.json(data);
+    const data = await syncTodayRnByMonth();
+    res.json(Array.isArray(data) ? data : []);
   } catch (err) {
     console.error('>>> HATA (today-rn-by-month):', err.message);
     res.status(500).json({ error: err.message });
-  } finally {
-    if (connection) {
-      await connection.close();
-    }
   }
 });
 
 // Bugün girilen rezervasyonlar: ay + pazar (Günlük Doluluk ile aynı pazar sırası/renk)
 app.get('/api/today-rn-by-month-market', async (req, res) => {
-  let connection;
-
   try {
-    console.log('>>> Bugün girilen RN aylık pazar dağılımı çekiliyor...');
-    connection = await oracledb.getConnection(dbConfig);
-
-    const result = await connection.execute(
-      `WITH market_totals AS (
-          SELECT r.mainmarketcode_long, COUNT(*) AS total_rn
-          FROM v8live.pro_isv_reservationinfo_voyage r
-          WHERE r.reservationstatus = 1
-            AND TO_CHAR(r.detail_date, 'YYYY') = '2026'
-            AND r.saledate <= ADD_MONTHS(TRUNC(SYSDATE), -12 * (2026 - TO_NUMBER(TO_CHAR(r.detail_date, 'YYYY'))))
-          GROUP BY r.mainmarketcode_long
-          ORDER BY total_rn DESC
-          FETCH FIRST 15 ROWS ONLY
-      ),
-      today_by_month_market AS (
-          SELECT TO_CHAR(r.detail_date, 'MM') AS month_num,
-                 r.mainmarketcode_long AS market,
-                 COUNT(*) AS rn
-          FROM v8live.pro_isv_reservationinfo_voyage r
-          WHERE r.reservationstatus = 1
-            AND TRUNC(r.saledate) = TRUNC(SYSDATE)
-            AND TO_CHAR(r.detail_date, 'YYYY') = '2026'
-            AND r.mainmarketcode_long IN (SELECT mainmarketcode_long FROM market_totals)
-          GROUP BY TO_CHAR(r.detail_date, 'MM'), r.mainmarketcode_long
-      )
-      SELECT t.month_num, t.market, t.rn, mt.total_rn AS market_total
-      FROM today_by_month_market t
-      JOIN market_totals mt ON t.market = mt.mainmarketcode_long
-      ORDER BY t.month_num, mt.total_rn DESC`,
-      [],
-      { outFormat: oracledb.OUT_FORMAT_OBJECT }
-    );
-
-    console.log('>>> Bugün RN aylık pazar dağılımı başarılı:', result.rows.length, 'satır');
-    const data = result.rows || [];
-    
-    // Supabase'e yaz
-    if (supabase && data.length > 0) {
-      const supabaseData = data.map(row => ({
-        month_num: row.MONTH_NUM || row.month_num || '',
-        market: row.MARKET || row.market || '',
-        rn: parseInt(row.RN || row.rn || 0),
-        market_total: parseInt(row.MARKET_TOTAL || row.market_total || 0)
-      }));
-      await syncToSupabase('today_rn_by_month_market', supabaseData, false);
-    }
-    
-    res.json(data);
+    const data = await syncTodayRnByMonthMarket();
+    res.json(Array.isArray(data) ? data : []);
   } catch (err) {
     console.error('>>> HATA (today-rn-by-month-market):', err.message);
     res.status(500).json({ error: err.message });
-  } finally {
-    if (connection) {
-      await connection.close();
-    }
   }
 });
 
 // Günlük pazar bazlı RN: 2026 tüm yıl OTB toplamına göre en büyük pazarlar (limit 15)
 app.get('/api/daily-market-rn', async (req, res) => {
-  let connection;
-
   try {
-    console.log('>>> Günlük pazar bazlı RN çekiliyor...');
-    connection = await oracledb.getConnection(dbConfig);
-
-    const result = await connection.execute(
-      `WITH market_totals AS (
-          SELECT
-              r.mainmarketcode_long,
-              COUNT(*) as total_rn
-          FROM v8live.pro_isv_reservationinfo_voyage r
-          WHERE r.reservationstatus = 1
-            AND TO_CHAR(r.detail_date, 'YYYY') = '2026'
-            AND r.saledate <= ADD_MONTHS(TRUNC(SYSDATE), -12 * (2026 - TO_NUMBER(TO_CHAR(r.detail_date, 'YYYY'))))
-          GROUP BY r.mainmarketcode_long
-          ORDER BY total_rn DESC
-          FETCH FIRST 15 ROWS ONLY
-      ),
-      daily_data AS (
-          SELECT
-              r.detail_date,
-              r.mainmarketcode_long,
-              COUNT(*) as rn_count
-          FROM v8live.pro_isv_reservationinfo_voyage r
-          WHERE r.reservationstatus = 1
-            AND TO_CHAR(r.detail_date, 'YYYY') = '2026'
-            AND r.saledate <= ADD_MONTHS(TRUNC(SYSDATE), -12 * (2026 - TO_NUMBER(TO_CHAR(r.detail_date, 'YYYY'))))
-            AND r.mainmarketcode_long IN (SELECT mainmarketcode_long FROM market_totals)
-          GROUP BY r.detail_date, r.mainmarketcode_long
-      )
-      SELECT
-          TO_CHAR(dd.detail_date, 'YYYY-MM-DD') as date_str,
-          dd.mainmarketcode_long as market,
-          dd.rn_count,
-          mt.total_rn as market_total
-      FROM daily_data dd
-      JOIN market_totals mt ON dd.mainmarketcode_long = mt.mainmarketcode_long
-      ORDER BY dd.detail_date, mt.total_rn DESC`,
-      [],
-      { outFormat: oracledb.OUT_FORMAT_OBJECT }
-    );
-
-    // Aynı 15 pazar için karşılaştırma: 2025/2024/2023/2022 de sadece bu pazarlar
-    const topMarkets = [...new Set((result.rows || []).map(r => (r.MARKET || r.market || '').trim()).filter(Boolean))];
-    const inClause = topMarkets.map((_, i) => ':' + (i + 1)).join(',');
-    const inSql = topMarkets.length ? ` AND r.mainmarketcode_long IN (${inClause})` : '';
-
-    const result2025 = await connection.execute(
-      `SELECT TO_CHAR(r.detail_date, 'MM-DD') AS month_day, SUM(1) AS total_rn
-       FROM v8live.pro_isv_reservationinfo_voyage r
-       WHERE r.reservationstatus = 1 AND TO_CHAR(r.detail_date, 'YYYY') = '2025'
-         AND r.saledate <= ADD_MONTHS(TRUNC(SYSDATE), -12)${inSql}
-       GROUP BY TO_CHAR(r.detail_date, 'MM-DD') ORDER BY TO_CHAR(r.detail_date, 'MM-DD')`,
-      topMarkets.length ? topMarkets : [], { outFormat: oracledb.OUT_FORMAT_OBJECT }
-    );
-    const result2024 = await connection.execute(
-      `SELECT TO_CHAR(r.detail_date, 'MM-DD') AS month_day, SUM(1) AS total_rn
-       FROM v8live.pro_isv_reservationinfo_voyage r
-       WHERE r.reservationstatus = 1 AND TO_CHAR(r.detail_date, 'YYYY') = '2024'
-         AND r.saledate <= ADD_MONTHS(TRUNC(SYSDATE), -24)${inSql}
-       GROUP BY TO_CHAR(r.detail_date, 'MM-DD') ORDER BY TO_CHAR(r.detail_date, 'MM-DD')`,
-      topMarkets.length ? topMarkets : [], { outFormat: oracledb.OUT_FORMAT_OBJECT }
-    );
-    const result2023 = await connection.execute(
-      `SELECT TO_CHAR(r.detail_date, 'MM-DD') AS month_day, SUM(1) AS total_rn
-       FROM v8live.pro_isv_reservationinfo_voyage r
-       WHERE r.reservationstatus = 1 AND TO_CHAR(r.detail_date, 'YYYY') = '2023'
-         AND r.saledate <= ADD_MONTHS(TRUNC(SYSDATE), -36)${inSql}
-       GROUP BY TO_CHAR(r.detail_date, 'MM-DD') ORDER BY TO_CHAR(r.detail_date, 'MM-DD')`,
-      topMarkets.length ? topMarkets : [], { outFormat: oracledb.OUT_FORMAT_OBJECT }
-    );
-    const result2022 = await connection.execute(
-      `SELECT TO_CHAR(r.detail_date, 'MM-DD') AS month_day, SUM(1) AS total_rn
-       FROM v8live.pro_isv_reservationinfo_voyage r
-       WHERE r.reservationstatus = 1 AND TO_CHAR(r.detail_date, 'YYYY') = '2022'
-         AND r.saledate <= ADD_MONTHS(TRUNC(SYSDATE), -48)${inSql}
-       GROUP BY TO_CHAR(r.detail_date, 'MM-DD') ORDER BY TO_CHAR(r.detail_date, 'MM-DD')`,
-      topMarkets.length ? topMarkets : [], { outFormat: oracledb.OUT_FORMAT_OBJECT }
-    );
-
-    console.log('>>> Günlük pazar bazlı RN başarılı:', result.rows.length, 'satır');
-    const responseData = {
-      data2026: result.rows,
-      daily_2025_totals: result2025.rows,
-      daily_2024_totals: result2024.rows,
-      daily_2023_totals: result2023.rows,
-      daily_2022_totals: result2022.rows
-    };
-    
-    // Supabase'e yaz: daily_market_rn (2026) ve daily_market_rn_totals (2025-2022)
-    if (supabase) {
-      if (result.rows && result.rows.length > 0) {
-        const supabaseData2026 = result.rows.map(row => ({
-          date_str: row.DATE_STR || row.date_str || '',
-          market: row.MARKET || row.market || '',
-          rn_count: parseInt(row.RN_COUNT || row.rn_count || 0),
-          market_total: parseInt(row.MARKET_TOTAL || row.market_total || 0)
-        }));
-        await syncToSupabase('daily_market_rn', supabaseData2026, false);
-      }
-      
-      // Totals için: 2025, 2024, 2023, 2022
-      const totalsData = [];
-      [result2025.rows, result2024.rows, result2023.rows, result2022.rows].forEach((rows, idx) => {
-        const year = 2025 - idx;
-        if (rows && rows.length > 0) {
-          rows.forEach(row => {
-            totalsData.push({
-              year_num: year,
-              month_day: row.MONTH_DAY || row.month_day || '',
-              total_rn: parseInt(row.TOTAL_RN || row.total_rn || 0)
-            });
-          });
-        }
-      });
-      if (totalsData.length > 0) {
-        await syncToSupabase('daily_market_rn_totals', totalsData, false);
-      }
-    }
-    
-    res.json(responseData);
+    const responseData = await syncDailyMarketRn();
+    const empty = { data2026: [], daily_2025_totals: [], daily_2024_totals: [], daily_2023_totals: [], daily_2022_totals: [] };
+    res.json(responseData || empty);
   } catch (err) {
     console.error('>>> HATA (daily-market-rn):', err.message);
     res.status(500).json({ error: err.message });
-  } finally {
-    if (connection) {
-      await connection.close();
-    }
   }
 });
 
 // Booking Pace: Son 30/15 gün + 2025 pace
 app.get('/api/booking-pace', async (req, res) => {
-  let connection;
-
   try {
-    console.log('>>> Booking pace verileri çekiliyor...');
-    connection = await oracledb.getConnection(dbConfig);
-
-    const result = await connection.execute(
-      `SELECT
-          CASE t_m.month_num
-              WHEN '01' THEN 'Jan' WHEN '02' THEN 'Feb' WHEN '03' THEN 'Mar'
-              WHEN '04' THEN 'Apr' WHEN '05' THEN 'May' WHEN '06' THEN 'Jun'
-              WHEN '07' THEN 'Jul' WHEN '08' THEN 'Aug' WHEN '09' THEN 'Sep'
-              WHEN '10' THEN 'Oct' WHEN '11' THEN 'Nov' WHEN '12' THEN 'Dec'
-          END AS month,
-          t_m.month_num,
-          -- 2026 parçaları
-          NVL(last_30_2026.rn, 0)        AS last_30_days_rn,
-          NVL(last_15_2026.rn, 0)        AS last_15_days_rn,
-          -- 2025 aynı pencere (16–30 ve son 15 gün)
-          NVL(last_30_2025.rn, 0)        AS last_30_days_2025_rn,
-          NVL(last_15_2025.rn, 0)        AS last_15_days_2025_rn
-      FROM (
-          SELECT '01' month_num FROM dual UNION ALL SELECT '02' FROM dual UNION ALL SELECT '03' FROM dual UNION ALL
-          SELECT '04' FROM dual UNION ALL SELECT '05' FROM dual UNION ALL SELECT '06' FROM dual UNION ALL
-          SELECT '07' FROM dual UNION ALL SELECT '08' FROM dual UNION ALL SELECT '09' FROM dual UNION ALL
-          SELECT '10' FROM dual UNION ALL SELECT '11' FROM dual UNION ALL SELECT '12' FROM dual
-      ) t_m
-      LEFT JOIN (
-          -- 2026: Son 30 gün (16–30 arası)
-          SELECT TO_CHAR(r.detail_date, 'MM') AS month_num, COUNT(*) AS rn
-          FROM v8live.pro_isv_reservationinfo_voyage r
-          WHERE r.reservationstatus = 1
-            AND TO_CHAR(r.detail_date, 'YYYY') = '2026'
-            AND r.saledate > TRUNC(SYSDATE) - 30
-            AND r.saledate <= TRUNC(SYSDATE) - 15
-          GROUP BY TO_CHAR(r.detail_date, 'MM')
-      ) last_30_2026 ON t_m.month_num = last_30_2026.month_num
-      LEFT JOIN (
-          -- 2026: Son 15 gün
-          SELECT TO_CHAR(r.detail_date, 'MM') AS month_num, COUNT(*) AS rn
-          FROM v8live.pro_isv_reservationinfo_voyage r
-          WHERE r.reservationstatus = 1
-            AND TO_CHAR(r.detail_date, 'YYYY') = '2026'
-            AND r.saledate > TRUNC(SYSDATE) - 15
-          GROUP BY TO_CHAR(r.detail_date, 'MM')
-      ) last_15_2026 ON t_m.month_num = last_15_2026.month_num
-      LEFT JOIN (
-          -- 2025: Aynı pencere – Son 30 gün (16–30 arası), referans tarihi 1 yıl önce
-          SELECT TO_CHAR(r.detail_date, 'MM') AS month_num, COUNT(*) AS rn
-          FROM v8live.pro_isv_reservationinfo_voyage r
-          WHERE r.reservationstatus = 1
-            AND TO_CHAR(r.detail_date, 'YYYY') = '2025'
-            AND r.saledate >  ADD_MONTHS(TRUNC(SYSDATE), -12) - 30
-            AND r.saledate <= ADD_MONTHS(TRUNC(SYSDATE), -12) - 15
-          GROUP BY TO_CHAR(r.detail_date, 'MM')
-      ) last_30_2025 ON t_m.month_num = last_30_2025.month_num
-      LEFT JOIN (
-          -- 2025: Aynı pencere – Son 15 gün, referans tarihi 1 yıl önce
-          SELECT TO_CHAR(r.detail_date, 'MM') AS month_num, COUNT(*) AS rn
-          FROM v8live.pro_isv_reservationinfo_voyage r
-          WHERE r.reservationstatus = 1
-            AND TO_CHAR(r.detail_date, 'YYYY') = '2025'
-            AND r.saledate >  ADD_MONTHS(TRUNC(SYSDATE), -12) - 15
-            AND r.saledate <= ADD_MONTHS(TRUNC(SYSDATE), -12)
-          GROUP BY TO_CHAR(r.detail_date, 'MM')
-      ) last_15_2025 ON t_m.month_num = last_15_2025.month_num
-      ORDER BY t_m.month_num`,
-      [],
-      { outFormat: oracledb.OUT_FORMAT_OBJECT }
-    );
-
-    console.log('>>> Booking pace başarılı');
-    const data = result.rows || [];
-    
-    // Supabase'e yaz
-    if (supabase && data.length > 0) {
-      const supabaseData = data.map(row => ({
-        month_num: row.MONTH_NUM || row.month_num || '',
-        month_label: row.MONTH || row.month || '',
-        last_30_days_rn: parseInt(row.LAST_30_DAYS_RN || row.last_30_days_rn || 0),
-        last_15_days_rn: parseInt(row.LAST_15_DAYS_RN || row.last_15_days_rn || 0),
-        last_30_days_2025_rn: parseInt(row.LAST_30_DAYS_2025_RN || row.last_30_days_2025_rn || 0),
-        last_15_days_2025_rn: parseInt(row.LAST_15_DAYS_2025_RN || row.last_15_days_2025_rn || 0)
-      }));
-      await syncToSupabase('booking_pace', supabaseData, false);
-    }
-    
-    res.json(data);
+    const data = await syncBookingPace();
+    res.json(Array.isArray(data) ? data : []);
   } catch (err) {
     console.error('>>> HATA (booking-pace):', err.message);
     res.status(500).json({ error: err.message });
-  } finally {
-    if (connection) {
-      await connection.close();
-    }
   }
 });
 
 // 2026 toplam OTB geliri (Yıllık Gelir Hedefi gauge için)
 app.get('/api/annual-target', async (req, res) => {
-  let connection;
-
   try {
-    console.log('>>> 2026 toplam gelir (annual-target) çekiliyor...');
-    connection = await oracledb.getConnection(dbConfig);
-
-    const result = await connection.execute(
-      `SELECT 
-          ROUND(SUM(CASE WHEN r.mainmarketcode_long = 'Local' 
-                         THEN r.netpostamount / NULLIF(ex_s.exch_rate_day, 0)
-                         ELSE r.netpostamount / NULLIF(ex_d.exch_rate_day, 0) 
-                    END), 0) AS total_revenue_2026
-       FROM v8live.pro_isv_reservationinfo_voyage r
-       LEFT JOIN pro_isv_exchangerates ex_s ON ex_s.wdat_date = r.saledate AND ex_s.zcur_id = 1013
-       LEFT JOIN pro_isv_exchangerates ex_d ON ex_d.wdat_date = r.detail_date AND ex_d.zcur_id = 1013
-       WHERE r.reservationstatus = 1
-         AND TO_CHAR(r.detail_date, 'YYYY') = '2026'
-         AND r.saledate <= TRUNC(SYSDATE)`,
-      [],
-      { outFormat: oracledb.OUT_FORMAT_OBJECT }
-    );
-
-    const row = result.rows && result.rows[0] ? result.rows[0] : {};
-    const data = { TOTAL_REVENUE_2026: row.TOTAL_REVENUE_2026 || 0 };
-    
-    // Supabase'e yaz
-    if (supabase) {
-      await upsertToSupabase('annual_target', {
-        total_revenue_2026: parseFloat(data.TOTAL_REVENUE_2026 || 0)
-      }, false);
-    }
-    
-    res.json(data);
+    const data = await syncAnnualTarget();
+    res.json(data && data.TOTAL_REVENUE_2026 !== undefined ? data : { TOTAL_REVENUE_2026: 0 });
   } catch (err) {
     console.error('>>> HATA (annual-target):', err.message);
     res.status(500).json({ error: err.message });
-  } finally {
-    if (connection) {
-      await connection.close();
-    }
   }
 });
 
@@ -1618,161 +1590,23 @@ app.get('/api/rn-heatmap', async (req, res) => {
 
 // Mainmarket bazında 2023–2026 BOB Revenue ve RN kırılımı (pazar payı + gelir grafikleri için)
 app.get('/api/market-mainmarket', async (req, res) => {
-  let connection;
-
   try {
-    console.log('>>> Mainmarket bazlı 2023–2026 BOB verileri çekiliyor...');
-    connection = await oracledb.getConnection(dbConfig);
-
-    const result = await connection.execute(
-      `WITH t_p AS (
-          SELECT 
-              r.mainmarketcode_long,
-              TO_CHAR(r.detail_date, 'YYYY') AS year_num,
-              CASE WHEN r.mainmarketcode_long = 'Local' THEN r.netpostamount / NULLIF(ex_s.exch_rate_day, 0)
-                   ELSE r.netpostamount / NULLIF(ex_d.exch_rate_day, 0) END AS revenue,
-              r.noofadults + NVL(r.ca3, 0) / 2 AS pax,
-              1 AS room_nights
-          FROM v8live.pro_isv_reservationinfo_voyage r
-          LEFT JOIN pro_isv_exchangerates ex_s ON ex_s.wdat_date = r.saledate AND ex_s.zcur_id = 1013
-          LEFT JOIN pro_isv_exchangerates ex_d ON ex_d.wdat_date = r.detail_date AND ex_d.zcur_id = 1013
-          WHERE r.reservationstatus = 1
-            AND r.mainmarketcode_long IS NOT NULL
-            AND TO_CHAR(r.detail_date, 'YYYY') IN ('2022', '2023', '2024', '2025', '2026')
-            AND r.saledate <= ADD_MONTHS(TRUNC(SYSDATE), -12 * (TO_NUMBER('2026') - TO_NUMBER(TO_CHAR(r.detail_date, 'YYYY'))))
-      ),
-      t_b AS (
-          SELECT 'Local' AS market_code, 14925123 AS bud_revenue, 85668 AS bud_pax, 174.22 AS bud_adb FROM dual UNION ALL
-          SELECT 'Great Britain' AS market_code, 3061206 AS bud_revenue, 19271 AS bud_pax, 158.85 AS bud_adb FROM dual UNION ALL
-          SELECT 'Russia' AS market_code, 9179980 AS bud_revenue, 50479 AS bud_pax, 181.86 AS bud_adb FROM dual UNION ALL
-          SELECT 'West Europe' AS market_code, 13452128 AS bud_revenue, 86368 AS bud_pax, 155.75 AS bud_adb FROM dual UNION ALL
-          SELECT 'CIS (BDT)' AS market_code, 0 AS bud_revenue, 1 AS bud_pax, 1 AS bud_adb FROM dual UNION ALL
-          SELECT 'Baltic' AS market_code, 0 AS bud_revenue, 1 AS bud_pax, 1 AS bud_adb FROM dual UNION ALL
-          SELECT 'East Europe' AS market_code, 0 AS bud_revenue, 1 AS bud_pax, 1 AS bud_adb FROM dual UNION ALL
-          SELECT 'Scandinavian' AS market_code, 0 AS bud_revenue, 1 AS bud_pax, 1 AS bud_adb FROM dual
-      )
-      SELECT
-          t_p.mainmarketcode_long AS SEGMENT,
-          ROUND(SUM(CASE WHEN t_p.year_num = '2026' THEN t_p.revenue END), 0) AS REVENUE_2026,
-          ROUND(SUM(CASE WHEN t_p.year_num = '2025' THEN t_p.revenue END), 0) AS REVENUE_2025,
-          ROUND(SUM(CASE WHEN t_p.year_num = '2024' THEN t_p.revenue END), 0) AS REVENUE_2024,
-          ROUND(SUM(CASE WHEN t_p.year_num = '2023' THEN t_p.revenue END), 0) AS REVENUE_2023,
-          ROUND(SUM(CASE WHEN t_p.year_num = '2022' THEN t_p.revenue END), 0) AS REVENUE_2022,
-          SUM(CASE WHEN t_p.year_num = '2026' THEN t_p.room_nights END) AS RN_2026,
-          SUM(CASE WHEN t_p.year_num = '2025' THEN t_p.room_nights END) AS RN_2025,
-          SUM(CASE WHEN t_p.year_num = '2024' THEN t_p.room_nights END) AS RN_2024,
-          SUM(CASE WHEN t_p.year_num = '2023' THEN t_p.room_nights END) AS RN_2023,
-          SUM(CASE WHEN t_p.year_num = '2022' THEN t_p.room_nights END) AS RN_2022
-      FROM t_p
-      LEFT JOIN t_b ON t_p.mainmarketcode_long = t_b.market_code
-      GROUP BY t_p.mainmarketcode_long
-      ORDER BY t_p.mainmarketcode_long`,
-      [],
-      { outFormat: oracledb.OUT_FORMAT_OBJECT }
-    );
-
-    console.log('>>> Mainmarket BOB verileri başarılı:', result.rows.length, 'pazar');
-    const data = result.rows || [];
-    
-    // Supabase'e yaz
-    if (supabase && data.length > 0) {
-      const supabaseData = data.map(row => ({
-        segment: row.SEGMENT || row.segment || '',
-        revenue_2026: parseFloat(row.REVENUE_2026 || row.revenue_2026 || 0),
-        revenue_2025: parseFloat(row.REVENUE_2025 || row.revenue_2025 || 0),
-        revenue_2024: parseFloat(row.REVENUE_2024 || row.revenue_2024 || 0),
-        revenue_2023: parseFloat(row.REVENUE_2023 || row.revenue_2023 || 0),
-        revenue_2022: parseFloat(row.REVENUE_2022 || row.revenue_2022 || 0),
-        rn_2026: parseInt(row.RN_2026 || row.rn_2026 || 0),
-        rn_2025: parseInt(row.RN_2025 || row.rn_2025 || 0),
-        rn_2024: parseInt(row.RN_2024 || row.rn_2024 || 0),
-        rn_2023: parseInt(row.RN_2023 || row.rn_2023 || 0),
-        rn_2022: parseInt(row.RN_2022 || row.rn_2022 || 0)
-      }));
-      await syncToSupabase('market_mainmarket', supabaseData, false);
-    }
-    
-    res.json(data);
+    const data = await syncMarketMainmarket();
+    res.json(Array.isArray(data) ? data : []);
   } catch (err) {
     console.error('>>> HATA (market-mainmarket):', err.message);
     res.status(500).json({ error: err.message });
-  } finally {
-    if (connection) {
-      await connection.close();
-    }
   }
 });
 
 // Acente Performansı: Top 20 acente, 2026 BOB Revenue mainmarket'e göre stacked (pacing: saledate bugüne kadar)
 app.get('/api/agent-performance', async (req, res) => {
-  let connection;
-
   try {
-    console.log('>>> Acente performans verileri çekiliyor (mainmarket dağılımı)...');
-    connection = await oracledb.getConnection(dbConfig);
-
-    const result = await connection.execute(
-      `WITH detail AS (
-          SELECT
-              r.AGENTNAME,
-              TO_CHAR(r.detail_date, 'YYYY') AS year_num,
-              CASE WHEN r.mainmarketcode_long = 'Local' THEN r.netpostamount / NULLIF(ex_s.exch_rate_day, 0)
-                   ELSE r.netpostamount / NULLIF(ex_d.exch_rate_day, 0) END AS revenue,
-              NVL(TRIM(r.mainmarketcode_long), 'Other') AS market
-          FROM v8live.pro_isv_reservationinfo_voyage r
-          LEFT JOIN pro_isv_exchangerates ex_s ON ex_s.wdat_date = r.saledate AND ex_s.zcur_id = 1013
-          LEFT JOIN pro_isv_exchangerates ex_d ON ex_d.wdat_date = r.detail_date AND ex_d.zcur_id = 1013
-          WHERE r.reservationstatus = 1
-            AND r.AGENTNAME IS NOT NULL
-            AND TO_CHAR(r.detail_date, 'YYYY') IN ('2025', '2026')
-            AND r.saledate <= ADD_MONTHS(TRUNC(SYSDATE), -12 * (TO_NUMBER('2026') - TO_NUMBER(TO_CHAR(r.detail_date, 'YYYY'))))
-      ),
-      totals AS (
-          SELECT AGENTNAME, SUM(CASE WHEN year_num = '2026' THEN revenue END) AS rev
-          FROM detail GROUP BY AGENTNAME
-      ),
-      ranked AS (
-          SELECT AGENTNAME, ROW_NUMBER() OVER (ORDER BY rev DESC NULLS LAST) AS rn FROM totals
-      ),
-      top_20 AS (
-          SELECT AGENTNAME, rn FROM ranked WHERE rn <= 20
-      ),
-      agg AS (
-          SELECT r.AGENTNAME AS SEGMENT, r.market AS MARKET, t.rn AS AGENT_ORDER,
-                 ROUND(SUM(CASE WHEN r.year_num = '2026' THEN r.revenue END), 0) AS REVENUE_2026,
-                 ROUND(SUM(CASE WHEN r.year_num = '2025' THEN r.revenue END), 0) AS REVENUE_2025
-          FROM detail r
-          JOIN top_20 t ON r.AGENTNAME = t.AGENTNAME
-          GROUP BY r.AGENTNAME, r.market, t.rn
-      )
-      SELECT SEGMENT, MARKET, REVENUE_2026, REVENUE_2025, AGENT_ORDER FROM agg ORDER BY AGENT_ORDER, REVENUE_2026 DESC`,
-      [],
-      { outFormat: oracledb.OUT_FORMAT_OBJECT }
-    );
-
-    console.log('>>> Acente performans başarılı:', result.rows.length, 'satır (acente x mainmarket)');
-    const data = result.rows || [];
-    
-    // Supabase'e yaz
-    if (supabase && data.length > 0) {
-      const supabaseData = data.map(row => ({
-        segment: row.SEGMENT || row.segment || '',
-        market: row.MARKET || row.market || '',
-        revenue_2026: parseFloat(row.REVENUE_2026 || row.revenue_2026 || 0),
-        revenue_2025: parseFloat(row.REVENUE_2025 || row.revenue_2025 || 0),
-        agent_order: parseInt(row.AGENT_ORDER || row.agent_order || 0)
-      }));
-      await syncToSupabase('agent_performance', supabaseData, false);
-    }
-    
-    res.json(data);
+    const data = await syncAgentPerformance();
+    res.json(Array.isArray(data) ? data : []);
   } catch (err) {
     console.error('>>> HATA (agent-performance):', err.message);
     res.status(500).json({ error: err.message });
-  } finally {
-    if (connection) {
-      await connection.close();
-    }
   }
 });
 
