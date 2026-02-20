@@ -2042,6 +2042,10 @@
                             }
                         },
                         datalabels: {
+                            display: function(ctx) {
+                                var meta = ctx.chart.getDatasetMeta(ctx.datasetIndex);
+                                return meta && !meta.hidden;
+                            },
                             formatter: (value, ctx) => {
                                 const i = ctx.dataIndex;
                                 const dsIdx = ctx.datasetIndex;
@@ -2217,29 +2221,33 @@
             if (!chart || !chart.data) return;
             const legendEl = container.querySelector('.chart-data-legend');
             if (!legendEl) return;
-            const isAvgRateChart = chart.canvas && chart.canvas.id === 'avgRateChart';
-            const isRnChart = chart.canvas && chart.canvas.id === 'rnChart';
             const labels = chart.data.labels || [];
             const datasets = chart.data.datasets || [];
-            let html = '<table><thead><tr><th>Etiket</th>';
+            const isAvgRateChart = chart.canvas && chart.canvas.id === 'avgRateChart';
+            const isRnChart = chart.canvas && chart.canvas.id === 'rnChart';
+            const isRevenueMainmarketChart = chart.canvas && chart.canvas.id === 'revenueMainmarketChart';
+            const isRevenueChart = chart.canvas && chart.canvas.id === 'revenueChart';
+            const showYoYColumn = (isAvgRateChart || isRnChart || isRevenueMainmarketChart || isRevenueChart) && datasets.length >= 2;
+            let html = '<table><thead><tr><th>Label</th>';
             datasets.forEach(function(ds) {
-                html += '<th>' + (ds.label || '') + '</th>';
+                if (!ds.hidden) html += '<th>' + (ds.label || '') + '</th>';
             });
-            if ((isAvgRateChart || isRnChart) && datasets.length >= 2) {
-                html += '<th>YoY Change (%)</th>';
+            if (showYoYColumn) {
+                html += '<th>2026 vs 2025 (%)</th>';
             }
             html += '</tr></thead><tbody>';
             const maxLen = Math.max(labels.length, datasets.length ? Math.max.apply(null, datasets.map(function(d) { return (d.data || []).length; })) : 0);
             for (var i = 0; i < maxLen; i++) {
                 html += '<tr><td>' + (labels[i] !== undefined && labels[i] !== null ? labels[i] : '-') + '</td>';
                 datasets.forEach(function(ds) {
+                    if (ds.hidden) return;
                     var v = (ds.data || [])[i];
                     html += '<td>' + formatDataLegendValue(v) + '</td>';
                 });
-                if ((isAvgRateChart || isRnChart) && datasets.length >= 2) {
+                if (showYoYColumn) {
                     var v2026 = (datasets[0].data || [])[i];
                     var v2025 = (datasets[1].data || [])[i];
-                    var diffCell = '-';
+                    var diffCell = '—';
                     if (typeof v2026 === 'number' && typeof v2025 === 'number' && v2025 !== 0) {
                         var diffPct = ((v2026 - v2025) / v2025) * 100;
                         var sign = diffPct > 0 ? '+' : '';
