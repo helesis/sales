@@ -706,6 +706,14 @@ async function syncDailyMarketRn() {
     const inClause = topMarkets.map((_, i) => ':' + (i + 1)).join(',');
     const inSql = topMarkets.length ? ` AND r.mainmarketcode_long IN (${inClause})` : '';
     const bindArr = topMarkets.length ? topMarkets : [];
+    const result2025ByMarket = topMarkets.length ? await connection.execute(
+      `SELECT TO_CHAR(r.detail_date, 'MM-DD') AS month_day, r.mainmarketcode_long AS market, COUNT(*) AS rn_count
+       FROM v8live.pro_isv_reservationinfo_voyage r
+       WHERE r.reservationstatus = 1 AND TO_CHAR(r.detail_date, 'YYYY') = '2025' AND r.saledate <= ADD_MONTHS(TRUNC(SYSDATE), -12)${inSql}
+       GROUP BY TO_CHAR(r.detail_date, 'MM-DD'), r.mainmarketcode_long
+       ORDER BY TO_CHAR(r.detail_date, 'MM-DD')`,
+      bindArr, { outFormat: oracledb.OUT_FORMAT_OBJECT }
+    ) : { rows: [] };
     const [result2025, result2024, result2023, result2022] = await Promise.all([
       connection.execute(`SELECT TO_CHAR(r.detail_date, 'MM-DD') AS month_day, SUM(1) AS total_rn FROM v8live.pro_isv_reservationinfo_voyage r WHERE r.reservationstatus = 1 AND TO_CHAR(r.detail_date, 'YYYY') = '2025' AND r.saledate <= ADD_MONTHS(TRUNC(SYSDATE), -12)${inSql} GROUP BY TO_CHAR(r.detail_date, 'MM-DD') ORDER BY TO_CHAR(r.detail_date, 'MM-DD')`, bindArr, { outFormat: oracledb.OUT_FORMAT_OBJECT }),
       connection.execute(`SELECT TO_CHAR(r.detail_date, 'MM-DD') AS month_day, SUM(1) AS total_rn FROM v8live.pro_isv_reservationinfo_voyage r WHERE r.reservationstatus = 1 AND TO_CHAR(r.detail_date, 'YYYY') = '2024' AND r.saledate <= ADD_MONTHS(TRUNC(SYSDATE), -24)${inSql} GROUP BY TO_CHAR(r.detail_date, 'MM-DD') ORDER BY TO_CHAR(r.detail_date, 'MM-DD')`, bindArr, { outFormat: oracledb.OUT_FORMAT_OBJECT }),
@@ -721,6 +729,14 @@ async function syncDailyMarketRn() {
       }));
       await syncToSupabase('daily_market_rn', supabaseData2026, true);
     }
+    if (supabase && result2025ByMarket.rows && result2025ByMarket.rows.length > 0) {
+      const supabaseData2025 = result2025ByMarket.rows.map(row => ({
+        month_day: row.MONTH_DAY || row.month_day || '',
+        market: row.MARKET || row.market || '',
+        rn_count: parseInt(row.RN_COUNT || row.rn_count || 0)
+      }));
+      await syncToSupabase('daily_market_rn_2025', supabaseData2025, true);
+    }
     const totalsData = [];
     [result2025.rows, result2024.rows, result2023.rows, result2022.rows].forEach((rows, idx) => {
       const year = 2025 - idx;
@@ -730,6 +746,7 @@ async function syncDailyMarketRn() {
     console.log('>>> Sync: daily_market_rn, daily_market_rn_totals');
     return {
       data2026: result.rows,
+      data2025: (result2025ByMarket && result2025ByMarket.rows) ? result2025ByMarket.rows : [],
       daily_2025_totals: result2025.rows,
       daily_2024_totals: result2024.rows,
       daily_2023_totals: result2023.rows,
@@ -737,7 +754,7 @@ async function syncDailyMarketRn() {
     };
   } catch (err) {
     console.error('>>> Sync hatası (daily_market_rn):', err.message);
-    return { data2026: [], daily_2025_totals: [], daily_2024_totals: [], daily_2023_totals: [], daily_2022_totals: [] };
+    return { data2026: [], data2025: [], daily_2025_totals: [], daily_2024_totals: [], daily_2023_totals: [], daily_2022_totals: [] };
   } finally {
     if (connection) await connection.close();
   }

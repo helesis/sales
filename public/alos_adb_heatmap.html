@@ -23,18 +23,16 @@
         .heatmap-wrap { display: flex; flex: 0 0 auto; min-width: min-content; min-height: min-content; }
         .heatmap-col-pazar { flex: 0 0 120px; z-index: 2; background: #f8fafc; box-shadow: 2px 0 6px rgba(0,0,0,0.08); overflow: hidden; }
         .heatmap-col-pazar table { width: 120px; table-layout: fixed; border-collapse: separate; border-spacing: 0; }
-        .heatmap-col-pazar .heatmap thead th,
-        .heatmap-col-pazar .heatmap tbody td { height: 48px; min-height: 48px; vertical-align: middle; font-size: 0.75rem; padding: 6px 8px; }
         .heatmap-col-data { flex: 1 0 auto; min-width: 0; overflow-x: auto; overflow-y: visible; }
-        .heatmap-col-data table { border-collapse: separate; border-spacing: 0; min-width: 640px; }
-        .heatmap-col-data .heatmap thead th,
-        .heatmap-col-data .heatmap tbody td { height: 48px; min-height: 48px; font-size: 0.75rem; padding: 6px 8px; }
+        .heatmap-col-data table { border-collapse: separate; border-spacing: 0; min-width: 640px; table-layout: fixed; }
         table.heatmap { border-collapse: separate; border-spacing: 0; }
-        .heatmap thead th { background: #1e293b; color: #fff; font-weight: 600; border-right: 1px solid #334155; border-bottom: 1px solid #334155; box-sizing: border-box; font-size: 0.75rem; }
+        .heatmap thead tr { height: 48px; }
+        .heatmap tbody tr { height: 48px; }
+        .heatmap thead th { background: #1e293b; color: #fff; font-weight: 600; border-right: 1px solid #334155; border-bottom: 1px solid #334155; box-sizing: border-box; font-size: 0.75rem; height: 48px; min-height: 48px; max-height: 48px; padding: 6px 8px; vertical-align: middle; line-height: 1.2; }
         .heatmap thead th:last-child { border-right: none; }
-        .heatmap th, .heatmap td { border-bottom: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; white-space: nowrap; box-sizing: border-box; font-size: 0.75rem; }
+        .heatmap th, .heatmap td { border-bottom: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; white-space: nowrap; box-sizing: border-box; font-size: 0.75rem; padding: 6px 8px; height: 48px; min-height: 48px; max-height: 48px; vertical-align: middle; line-height: 1.2; }
         .heatmap th:last-child, .heatmap td:last-child { border-right: none; }
-        .heatmap tbody td { min-width: 100px; vertical-align: middle; cursor: default; transition: transform 0.15s ease, box-shadow 0.15s ease; }
+        .heatmap tbody td { min-width: 100px; cursor: default; transition: transform 0.15s ease, box-shadow 0.15s ease; }
         .heatmap tbody td:hover { transform: scale(1.02); box-shadow: 0 4px 12px rgba(0,0,0,0.12); z-index: 1; }
         .heatmap-col-pazar .heatmap thead th { background: #1e293b; }
         .heatmap-col-pazar .heatmap tbody td { background: #f8fafc; font-weight: 600; color: #0f172a; }
