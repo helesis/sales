@@ -913,17 +913,17 @@ async function syncMarketMainmarket() {
   }
 }
 
-// Sync: Tüm verileri senkronize et
-async function syncAllData() {
+// Sync: Tüm verileri senkronize et (initial: true = açılışta bir kere, saat kontrolü yok)
+async function syncAllData(opts = {}) {
   if (!supabase) {
     console.log('>>> Sync atlandı: Supabase yapılandırılmamış');
     return;
   }
-  if (!isWithinSyncHours()) {
+  if (!opts.initial && !isWithinSyncHours()) {
     console.log('>>> Sync atlandı: Saat 09:00-17:00 dışında');
     return;
   }
-  console.log('>>> Periyodik sync başlıyor...');
+  console.log(opts.initial ? '>>> İlk sync (açılış) başlıyor...' : '>>> Periyodik sync başlıyor...');
   await syncTodayMetrics();
   await syncMonthlyData();
   await syncRnHeatmap();
@@ -937,16 +937,16 @@ async function syncAllData() {
   await syncAnnualTarget();
   await syncAgentPerformance();
   await syncMarketMainmarket();
-  console.log('>>> Periyodik sync tamamlandı');
+  console.log(opts.initial ? '>>> İlk sync tamamlandı' : '>>> Periyodik sync tamamlandı');
 }
 
 // Periyodik sync başlat
 function startPeriodicSync() {
-  // İlk sync'i hemen çalıştır (eğer saat uygunsa)
-  syncAllData();
-  // Sonra her 30 dakikada bir
+  // Açılışta bir kere sync yap (saat fark etmez)
+  syncAllData({ initial: true });
+  // Sonra her 30 dakikada bir (09:00-17:00 arası)
   setInterval(() => syncAllData(), SYNC_INTERVAL_MS);
-  console.log('>>> Periyodik sync aktif: 30 dakikada bir (09:00-17:00)');
+  console.log('>>> Periyodik sync aktif: açılışta 1 sync, sonra 30 dakikada bir (09:00-17:00)');
 }
 
 // Dashboard sayfası (login sonrası gösterilecek) — statik dosyalar public/ içinden

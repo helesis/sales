@@ -1811,7 +1811,7 @@
                 datalabels: { display: false },
                 yAxisID: 'yLines'
             });
-            const line2025 = (rawData && rawData.daily_2025_totals && rawData.daily_2025_totals.length) ? lineOpt('2025', line2025Data, 'rgba(120, 120, 120, 0.9)', false) : null;
+            const line2025 = (rawData && rawData.daily_2025_totals && rawData.daily_2025_totals.length) ? lineOpt('2025', line2025Data, 'rgba(120, 120, 120, 0.9)', true) : null;
             const line2024 = (rawData && rawData.daily_2024_totals && rawData.daily_2024_totals.length) ? lineOpt('2024', line2024Data, 'rgba(34, 197, 94, 0.9)', true) : null;
             const line2023 = (rawData && rawData.daily_2023_totals && rawData.daily_2023_totals.length) ? lineOpt('2023', line2023Data, 'rgba(234, 88, 12, 0.9)', true) : null;
             const line2022 = (rawData && rawData.daily_2022_totals && rawData.daily_2022_totals.length) ? lineOpt('2022', line2022Data, 'rgba(139, 92, 246, 0.9)', true) : null;
