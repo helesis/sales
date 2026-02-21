@@ -1791,7 +1791,8 @@
                 backgroundColor: colors.markets[index % colors.markets.length],
                 borderColor: 'white',
                 borderWidth: 1,
-                stack: 'stack2026'
+                stack: 'stack2026',
+                order: 0
             }));
 
             const area2025Datasets = marketArray.map((market, index) => {
@@ -1812,6 +1813,7 @@
                     pointRadius: 0,
                     pointHoverRadius: 4,
                     stack: 'stack2025',
+                    order: 1,
                     hidden: true,
                     datalabels: { display: false }
                 };
